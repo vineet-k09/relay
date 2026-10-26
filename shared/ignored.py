@@ -1,6 +1,6 @@
 from pathlib import Path
 
-IGNORE_FILE = Path(__file__).parent.parent / ".metaignores"
+IGNORE_FILE = Path(__file__).parent.parent / ".relayignore"
 
 def load_ignored():
     with open(IGNORE_FILE, "r") as f:

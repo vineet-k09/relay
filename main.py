@@ -7,7 +7,7 @@ from shared.styles import *
 from shared.hash import calculate_hash
 from shared.ignored import IGNORED
 
-db = sqlite3.connect(".metasync.db")
+db = sqlite3.connect(".relay.db")
 
 db.execute("""
 CREATE TABLE IF NOT EXISTS files(

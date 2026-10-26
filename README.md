@@ -1,4 +1,4 @@
-vineet_kushwaha1@cloudshell:~/metasync$ make init
+vineet_kushwaha1@cloudshell:~/relay$ make init
 python ./init.py
 name: init.py path: ./init.py
 stat: os.stat_result(st_mode=33188, st_ino=145862, st_dev=2065, st_nlink=1, st_uid=1000, st_gid=1000, st_size=1363, st_atime=1793014776, st_mtime=1793015850, st_ctime=1793015850)
