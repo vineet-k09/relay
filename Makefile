@@ -1,6 +1,6 @@
 db:
 	sqlite3 .relay.db
 run:
-	python ./main.py
+	uv run relay
 reset:
 	rm -rf .relay.db
