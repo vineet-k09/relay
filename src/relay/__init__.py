@@ -1,11 +1,17 @@
+"""
+core/ is Domain & Engine layer (diff.py, endpoint.py, transfer planning).
+cli.py is Presentation / Interface layer (argparse, colors, prompts).
+"""
+
 import os
 import sqlite3
 from fnmatch import fnmatch
 
-# ignored list, styles, and hash
-from .shared import *
-# database utilities
-from .utils.db import *
+from .shared.hash import calculate_hashes
+from .shared.ignored import IGNORED
+from .shared.styles import CYAN, GREEN, RED, RESET, YELLOW
+from .utils.db import delete_path_db, init_db, insert_db
+
 
 def main():
     db = sqlite3.connect(".relay.db")
@@ -45,16 +51,34 @@ def main():
 
             if path in db_records:
                 record = db_records[path]
-                if record["size"] != stat.st_size or record["mtime"] != stat.st_mtime_ns:
+                if (
+                    record["size"] != stat.st_size
+                    or record["mtime"] != stat.st_mtime_ns
+                ):
                     file_hash, file_crc = calculate_hashes(path)
                     if record["hash"] == file_hash:
                         print(f"{RESET}unchanged content (mtime updated): {path}")
                     else:
-                        print(f"{YELLOW}changed{RESET} {path}, size: {stat.st_size}, mtime: {stat.st_mtime_ns}")
+                        print(
+                            f"{YELLOW}changed{RESET} {path}, "
+                            f"size: {stat.st_size}, mtime: {stat.st_mtime_ns}"
+                        )
 
                     db.execute(
-                        "UPDATE files SET dev=?, inode=?, size=?, mtime=?, hash=?, crc32c=? WHERE path=?",
-                        (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, file_hash, file_crc, path),
+                        """
+                        UPDATE files
+                        SET dev=?, inode=?, size=?, mtime=?, hash=?, crc32c=?
+                        WHERE path=?
+                        """,
+                        (
+                            stat.st_dev,
+                            stat.st_ino,
+                            stat.st_size,
+                            stat.st_mtime_ns,
+                            file_hash,
+                            file_crc,
+                            path,
+                        ),
                     )
             else:
                 untracked[path] = stat
@@ -76,7 +100,7 @@ def main():
     for new_path, stat in list(untracked.items()):
         dev = stat.st_dev
         ino = stat.st_ino
-        if (dev, ino) in vanished_by_inode and vanished_by_inode[(dev, ino)]:
+        if vanished_by_inode.get((dev, ino)):
             old_path = vanished_by_inode[(dev, ino)].pop(0)
             vanished_paths.remove(old_path)
             del untracked[new_path]
@@ -85,7 +109,7 @@ def main():
             old_crc = db_records[old_path]["crc32c"]
             matched_moves.append((old_path, new_path, old_hash, old_crc, stat, "inode"))
 
-    # Phase 4B: Hash Fallback Matching (for Windows / cross-fs / when inode didn't match)
+    # Phase 4B: Hash Fallback Matching (cross-fs / when inode didn't match)
     vanished_by_size = {}
     for vp in vanished_paths:
         size = db_records[vp]["size"]
@@ -107,19 +131,42 @@ def main():
             cand_paths.remove(match_old)
             vanished_paths.remove(match_old)
             del untracked[new_path]
-            matched_moves.append((match_old, new_path, file_hash, file_crc, stat, "hash"))
+            matched_moves.append(
+                (match_old, new_path, file_hash, file_crc, stat, "hash")
+            )
 
     # 5. Apply Moves to DB
     for old_path, new_path, f_hash, f_crc, stat, reason in matched_moves:
         print(f"{CYAN}moved ({reason}){RESET} {old_path} -> {new_path}")
         delete_path_db(db, old_path)
-        insert_db(db, new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, f_hash, f_crc)
+        insert_db(
+            db,
+            new_path,
+            stat.st_dev,
+            stat.st_ino,
+            stat.st_size,
+            stat.st_mtime_ns,
+            f_hash,
+            f_crc,
+        )
 
     # 6. Apply genuine Brand-New Files
     for new_path, stat in untracked.items():
         file_hash, file_crc = calculate_hashes(new_path)
-        print(f"{GREEN}new{RESET} {new_path}, hash: {file_hash[:12]}..., size: {stat.st_size}")
-        insert_db(db, new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, file_hash, file_crc)
+        print(
+            f"{GREEN}new{RESET} {new_path}, "
+            f"hash: {file_hash[:12]}..., size: {stat.st_size}"
+        )
+        insert_db(
+            db,
+            new_path,
+            stat.st_dev,
+            stat.st_ino,
+            stat.st_size,
+            stat.st_mtime_ns,
+            file_hash,
+            file_crc,
+        )
 
     # 7. Apply genuine Deletions
     for old_path in vanished_paths:

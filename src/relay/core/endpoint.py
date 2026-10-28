@@ -1,40 +1,37 @@
+import re
 from dataclasses import dataclass, field
 from enum import Enum, auto
-import re
 from pathlib import Path
-from typing import Optional, List
+
 
 class EndPointType(Enum):
     LOCAL = auto()
     GCS = auto()
     SSH = auto()
 
+
 @dataclass
 class Endpoint:
     raw: str
     type: EndPointType
     path: str
-    bucket: Optional[str] = None
-    zone: Optional[str] = None
-    instance: Optional[str] = None
-    flags: List[str] = field(default_factory=list)
+    bucket: str | None = None
+    zone: str | None = None
+    instance: str | None = None
+    flags: list[str] = field(default_factory=list)
+
 
 def parse_endpoint(target: str) -> Endpoint:
     target = target.strip()
 
     # gcs ('gcs://', 'gs://', 'gcloud storage...')
-    clean_target = re.sub(r'^(gcloud\s+storage\s+)?', '',target).strip()
-    gcs_match = re.match(r'^(?:gcs|gs)://([^/]+)(?:/(.*))?$', clean_target)
+    clean_target = re.sub(r"^(gcloud\s+storage\s+)?", "", target).strip()
+    gcs_match = re.match(r"^(?:gcs|gs)://([^/]+)(?:/(.*))?$", clean_target)
 
     if gcs_match:
         bucket = gcs_match.group(1)
         path = gcs_match.group(2)
-        return Endpoint(
-            raw=target,
-            type=EndPointType.GCS,
-            path=path,
-            bucket=bucket
-        )
+        return Endpoint(raw=target, type=EndPointType.GCS, path=path, bucket=bucket)
     # gcp workbench (ssh <zone>/<instance>/<remote_path> [--flags])
     if target.startswith("ssh "):
         parts = target[4:].strip().split()
@@ -52,12 +49,12 @@ def parse_endpoint(target: str) -> Endpoint:
                 path=remote_path,
                 zone=zone,
                 instance=instance,
-                flags=extra_flags
+                flags=extra_flags,
             )
 
     # default to local path
     return Endpoint(
         raw=target,
         type=EndPointType.LOCAL,
-        path=str(Path(target).expanduser().resolve())
+        path=str(Path(target).expanduser().resolve()),
     )
