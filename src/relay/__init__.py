@@ -2,34 +2,10 @@ import os
 import sqlite3
 from fnmatch import fnmatch
 
+# ignored list, styles, and hash
 from .shared import *
-
-
-def init_db(db: sqlite3.Connection):
-    db.execute("""
-    CREATE TABLE IF NOT EXISTS files(
-        path TEXT PRIMARY KEY,
-        dev INTEGER,
-        inode INTEGER,
-        size INTEGER NOT NULL,
-        mtime INTEGER NOT NULL,
-        hash TEXT,
-        crc32c TEXT
-    )
-    """)
-
-    # Schema migration helper for existing databases
-    columns = [col[1] for col in db.execute("PRAGMA table_info(files)").fetchall()]
-    if "dev" not in columns:
-        db.execute("ALTER TABLE files ADD COLUMN dev INTEGER")
-    if "inode" not in columns:
-        db.execute("ALTER TABLE files ADD COLUMN inode INTEGER")
-    if "crc32c" not in columns:
-        db.execute("ALTER TABLE files ADD COLUMN crc32c TEXT")
-
-    db.execute("CREATE INDEX IF NOT EXISTS idx_files_inode ON files(dev, inode)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash)")
-
+# database utilities
+from .utils.db import *
 
 def main():
     db = sqlite3.connect(".relay.db")
@@ -136,25 +112,19 @@ def main():
     # 5. Apply Moves to DB
     for old_path, new_path, f_hash, f_crc, stat, reason in matched_moves:
         print(f"{CYAN}moved ({reason}){RESET} {old_path} -> {new_path}")
-        db.execute("DELETE FROM files WHERE path=?", (old_path,))
-        db.execute(
-            "INSERT INTO files (path, dev, inode, size, mtime, hash, crc32c) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, f_hash, f_crc),
-        )
+        delete_path_db(db, old_path)
+        insert_db(db, new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, f_hash, f_crc)
 
     # 6. Apply genuine Brand-New Files
     for new_path, stat in untracked.items():
         file_hash, file_crc = calculate_hashes(new_path)
         print(f"{GREEN}new{RESET} {new_path}, hash: {file_hash[:12]}..., size: {stat.st_size}")
-        db.execute(
-            "INSERT INTO files (path, dev, inode, size, mtime, hash, crc32c) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, file_hash, file_crc),
-        )
+        insert_db(db, new_path, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, file_hash, file_crc)
 
     # 7. Apply genuine Deletions
     for old_path in vanished_paths:
         print(f"{RED}deleted{RESET} {old_path}")
-        db.execute("DELETE FROM files WHERE path=?", (old_path,))
+        delete_path_db(db, old_path)
 
     db.commit()
     db.close()
