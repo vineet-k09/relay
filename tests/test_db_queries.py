@@ -4,7 +4,6 @@ import unittest
 from relay.core.diff import Action, compute_diff
 from relay.shared.print_diff import print_diff
 
-
 def create_mock_dbs():
     """Builds two in-memory sqlite dbs covering all 5 core sync
     scenarios."""
@@ -43,63 +42,59 @@ def create_mock_dbs():
     return src, dst
 
 
-class TestDbQueries(unittest.TestCase):
-    def test_mock_scenarios(self):
-        src, dst = create_mock_dbs()
-        source_rows = src.execute("SELECT path, hash FROM files").fetchall()
-        dest_rows = dst.execute("SELECT path, hash FROM files").fetchall()
+def test_mock_scenarios(self):
+    src, dst = create_mock_dbs()
+    source_rows = src.execute("SELECT path, hash FROM files").fetchall()
+    dest_rows = dst.execute("SELECT path, hash FROM files").fetchall()
 
-        plan = compute_diff(source_rows, dest_rows)
-        print_diff(plan)
+    plan = compute_diff(source_rows, dest_rows)
+    print_diff(plan)
 
-        # Typed DiffPlan property checks (No optional guards needed)
-        self.assertEqual(len(plan.unchanged), 1)
-        self.assertEqual(plan.unchanged[0].path, "docs/readme.md")
+    # Typed DiffPlan property checks (No optional guards needed)
+    assert len(plan.unchanged) == 1
+    assert plan.unchanged[0].path == "docs/readme.md"
 
-        self.assertEqual(len(plan.moves), 1)
-        self.assertEqual(plan.moves[0].path, "src/core/utils.py")
-        self.assertEqual(plan.moves[0].origin_path, "src/old_utils.py")
+    assert len(plan.moves) ==  1
+    assert plan.moves[0].path == "src/core/utils.py"
+    assert plan.moves[0].origin_path == "src/old_utils.py"
 
-        self.assertEqual(len(plan.transfers), 2)
-        transfers_by_path = {t.path: t for t in plan.transfers}
-        self.assertFalse(transfers_by_path["src/main.py"].is_new)  # MODIFIED
-        self.assertTrue(transfers_by_path["assets/logo.png"].is_new)  # ADDED
+    assert len(plan.transfers) == 2
+    transfers_by_path = {t.path: t for t in plan.transfers}
+    assert transfers_by_path["src/main.py"].is_new is False  # MODIFIED
+    assert transfers_by_path["assets/logo.png"].is_new is True  # ADDED
 
-        self.assertEqual(len(plan.deletions), 1)
-        self.assertEqual(plan.deletions[0].path, "temp/cache.tmp")
+    assert len(plan.deletions) == 1
+    assert plan.deletions[0].path == "temp/cache.tmp"
 
-        # Backward compatible iterable checks
-        res_by_path = {r.path: r for r in plan}
-        self.assertEqual(res_by_path["docs/readme.md"].action, Action.UNCHANGED)
-        self.assertEqual(res_by_path["src/main.py"].action, Action.MODIFIED)
-        self.assertEqual(res_by_path["src/core/utils.py"].action, Action.MOVED)
-        self.assertEqual(res_by_path["assets/logo.png"].action, Action.ADDED)
-        self.assertEqual(res_by_path["temp/cache.tmp"].action, Action.DELETED)
+    # Backward compatible iterable checks
+    res_by_path = {r.path: r for r in plan}
+    assert res_by_path["docs/readme.md"].action == Action.UNCHANGED
+    assert res_by_path["src/main.py"].action == Action.MODIFIED
+    assert res_by_path["src/core/utils.py"].action == Action.MOVED
+    assert res_by_path["assets/logo.png"].action == Action.ADDED
+    assert res_by_path["temp/cache.tmp"].action == Action.DELETED
 
-    def test_db_helpers(self):
-        from relay.utils.db import copy_path_db, init_db, insert_db, update_path_db
+def test_db_helpers(self):
+    from relay.utils.db import copy_path_db, init_db, insert_db, update_path_db
 
-        db = sqlite3.connect(":memory:")
-        init_db(db)
-        insert_db(db, "orig.txt", 1, 2, 100, 1000, "hash_abc", "crc_123")
+    db = sqlite3.connect(":memory:")
+    init_db(db)
+    insert_db(db, "orig.txt", 1, 2, 100, 1000, "hash_abc", "crc_123")
 
-        # Test update_path_db preserves metadata
-        update_path_db(db, "orig.txt", "renamed.txt")
-        row = db.execute(
-            "SELECT path, size, hash, crc32c FROM files WHERE path = 'renamed.txt'"
-        ).fetchone()
-        self.assertEqual(row, ("renamed.txt", 100, "hash_abc", "crc_123"))
-        self.assertIsNone(
-            db.execute("SELECT path FROM files WHERE path = 'orig.txt'").fetchone()
-        )
+    # Test update_path_db preserves metadata
+    update_path_db(db, "orig.txt", "renamed.txt")
+    row = db.execute(
+        "SELECT path, size, hash, crc32c FROM files WHERE path = 'renamed.txt'"
+    ).fetchone()
+    assert row == ("renamed.txt", 100, "hash_abc", "crc_123")
 
-        # Test copy_path_db clones metadata
-        copy_path_db(db, "renamed.txt", "copied.txt")
-        row_copy = db.execute(
-            "SELECT path, size, hash, crc32c FROM files WHERE path = 'copied.txt'"
-        ).fetchone()
-        self.assertEqual(row_copy, ("copied.txt", 100, "hash_abc", "crc_123"))
+    assert (
+        db.execute("SELECT path FROM files WHERE path = 'orig.txt'").fetchone()
+    ) is None
 
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    # Test copy_path_db clones metadata
+    copy_path_db(db, "renamed.txt", "copied.txt")
+    row_copy = db.execute(
+        "SELECT path, size, hash, crc32c FROM files WHERE path = 'copied.txt'"
+    ).fetchone()
+    assert row_copy == ("copied.txt", 100, "hash_abc", "crc_123")
