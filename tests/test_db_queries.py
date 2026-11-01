@@ -1,5 +1,4 @@
 import sqlite3
-import unittest
 
 from relay.core.diff import Action, compute_diff
 from relay.shared.print_diff import print_diff
@@ -41,8 +40,7 @@ def create_mock_dbs():
 
     return src, dst
 
-
-def test_mock_scenarios(self):
+def test_mock_scenarios():
     src, dst = create_mock_dbs()
     source_rows = src.execute("SELECT path, hash FROM files").fetchall()
     dest_rows = dst.execute("SELECT path, hash FROM files").fetchall()
@@ -74,7 +72,7 @@ def test_mock_scenarios(self):
     assert res_by_path["assets/logo.png"].action == Action.ADDED
     assert res_by_path["temp/cache.tmp"].action == Action.DELETED
 
-def test_db_helpers(self):
+def test_db_helpers():
     from relay.utils.db import copy_path_db, init_db, insert_db, update_path_db
 
     db = sqlite3.connect(":memory:")

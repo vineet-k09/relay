@@ -6,6 +6,7 @@ Execution Order: Moves -> Copies -> Transfers (Added/Modified) -> Deletions (--d
 import sqlite3
 from dataclasses import dataclass
 
+from relay.adapters.base import BaseAdapters
 from relay.core.diff import DiffPlan
 from relay.utils.db import copy_path_db, delete_path_db, insert_db, update_path_db
 
@@ -28,6 +29,10 @@ class SyncExecutor:
 
     def confirm_plan(self) -> bool:
         """User review step before modifying destination or state."""
+        if self.plan.total_changes == 0:
+            print("\nEverything is up to date. Zero changes needed.")
+            return False
+
         added_count = sum(1 for t in self.plan.transfers if t.is_new)
         modified_count = len(self.plan.transfers) - added_count
         moved_count = len(self.plan.moves)
@@ -35,19 +40,24 @@ class SyncExecutor:
         deleted_count = len(self.plan.deletions)
 
         print("\nPlanned changes:")
-        print(f"  • {added_count} to add")
-        print(f"  • {modified_count} to modify")
+        if added_count:
+            print(f"  • {added_count} to add")
+        if modified_count:
+            print(f"  • {modified_count} to modify")
         if moved_count:
             print(f"  • {moved_count} to move (zero network transfer)")
         if copied_count:
             print(f"  • {copied_count} to duplicate locally (zero network transfer)")
-        if self.delete:
+        if self.delete and deleted_count:
             print(f"  • {deleted_count} to delete")
-        else:
-            print(f"  • {deleted_count} untracked (kept)")
+        elif deleted_count:
+            print(
+                f"  • {deleted_count} untracked on destination "
+                "(kept, use --delete to prune)"
+            )
 
         if self.dry_run:
-            print("\n[dry-run] No changes will be applied.")
+            print("\n[dry-run] Dry run active. No changes applied.")
             return False
 
         if deleted_count > 0 and self.delete:
@@ -56,14 +66,15 @@ class SyncExecutor:
 
         return True
 
-    def execute(self, dst_db: sqlite3.Connection, transport_adapter) -> SyncStats:
+    def execute(
+        self, dst_db: sqlite3.Connection, transport_adapter: BaseAdapters
+    ) -> SyncStats:
         """Executes operations in safe topological order and updates DB state."""
         if not self.confirm_plan():
             return self.stats
 
         with dst_db:
             # 1. MOVED: Rename on destination and update path in DB
-            # (preserves all existing metadata!)
             for move in self.plan.moves:
                 transport_adapter.rename(move.origin_path, move.path)
                 update_path_db(dst_db, old_path=move.origin_path, new_path=move.path)
@@ -100,4 +111,13 @@ class SyncExecutor:
                     self.stats.deleted += 1
 
         self.stats.skipped = len(self.plan.unchanged)
+
+        print("\nSync completed successfully:")
+        print(f"  • {self.stats.transferred} transferred")
+        if self.stats.moved:
+            print(f"  • {self.stats.moved} moved")
+        if self.stats.copied:
+            print(f"  • {self.stats.copied} copied")
+        if self.stats.deleted:
+            print(f"  • {self.stats.deleted} deleted")
         return self.stats

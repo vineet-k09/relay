@@ -17,7 +17,6 @@ RED = "\033[91m"
 GREEN = "\033[92m"
 RESET = "\033[0m"
 
-
 class Action(Enum):
     UNCHANGED = auto()
     MODIFIED = auto()
@@ -26,13 +25,11 @@ class Action(Enum):
     COPIED = auto()
     DELETED = auto()
 
-
 @dataclass(frozen=True)
 class MoveItem:
     path: str
     origin_path: str
     hash: str
-
 
 @dataclass(frozen=True)
 class CopyItem:
@@ -40,25 +37,21 @@ class CopyItem:
     origin_path: str
     hash: str
 
-
 @dataclass(frozen=True)
 class TransferItem:
     path: str
     hash: str
     is_new: bool  # True if ADDED, False if MODIFIED
 
-
 @dataclass(frozen=True)
 class DeleteItem:
     path: str
     hash: str
 
-
 @dataclass(frozen=True)
 class UnchangedItem:
     path: str
     hash: str
-
 
 @dataclass
 class DiffResult:
@@ -66,7 +59,6 @@ class DiffResult:
     path: str
     origin_path: str | None = None
     hash: str | None = None
-
 
 @dataclass
 class DiffPlan:

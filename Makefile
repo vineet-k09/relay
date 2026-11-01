@@ -1,4 +1,7 @@
-.PHONY: db run reset test pytest lint format check
+.PHONY: db run reset test pytest lint format check sandbox
+
+sandbox:
+	python3 scripts/reset_sandbox.py
 
 db:
 	sqlite3 .relay.db

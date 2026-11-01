@@ -18,15 +18,15 @@ def init_db(db: Connection) -> None:
 
     # Schema migration helper for existing databases
     columns = [col[1] for col in db.execute("PRAGMA table_info(files)").fetchall()]
-    # 0|path|TEXT|0||1
-    # 1|size|INTEGER|1||0
-    # 2|mtime|INTEGER|1||0
-    # 3|hash|TEXT|0||0
-    # 4|dev|INTEGER|0||0
-    # 5|inode|INTEGER|0||0
-    # 6|crc32c|TEXT|0||0
-    # latest migrations
+    # 0|path    |TEXT   |0| |1
+    # 1|size    |INTEGER|1| |0
+    # 2|mtime   |INTEGER|1| |0
+    # 3|hash    |TEXT   |0| |0
+    # 4|dev     |INTEGER|0| |0
+    # 5|inode   |INTEGER|0| |0
+    # 6|crc32c  |TEXT   |0| |0
 
+    # latest migrations
     if "dev" not in columns:
         db.execute("ALTER TABLE files ADD COLUMN dev INTEGER")
     if "inode" not in columns:
@@ -63,7 +63,7 @@ def insert_db(
     """
     db.execute(
         """
-        INSERT INTO files (path, dev, inode, size, mtime, hash, crc32c)
+        INSERT OR REPLACE INTO files (path, dev, inode, size, mtime, hash, crc32c)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (path, dev, inode, size, mtime, hash, crc32c),

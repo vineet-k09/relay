@@ -1,8 +1,14 @@
 import argparse
 import sys
 
-from relay.core.endpoint import parse_endpoint
+from relay.adapters import get_adapter
+from relay.core.diff import compute_diff
+from relay.core.endpoint import EndPointType, parse_endpoint
+from relay.core.scanner import scan_local_dir
+from relay.core.sync import SyncExecutor
+from relay.shared.print_diff import print_diff
 from relay.shared.styles import BLUE, RED, RESET, YELLOW
+from relay.utils.db import fetch_all_db
 
 
 def parse_args():
@@ -42,36 +48,72 @@ def parse_args():
 
 
 def handle_sync(args):
-    source_raw = args.source
-    dest_raw = args.destination
+    src = parse_endpoint(args.source)
+    dst = parse_endpoint(args.destination)
 
-    print(f"{BLUE}[relay]{RESET} Resolving endpoints:")
-    print(f"    Source: {YELLOW}{source_raw}{RESET}")
-    print(f"    Destination:{YELLOW}{dest_raw}{RESET}")
-
-    # 1. parse enpoints (import fro core.enpoints)
-    _src = parse_endpoint(source_raw)
-    _dst = parse_endpoint(dest_raw)
-
-    # 2. verify auth
-    # maybe let the environment handle this one
-
-    # 3. compute diffs
-
-    if args.dry_run:
-        print("dry run")
+    if (
+        src.type == EndPointType.LOCAL
+        and dst.type == EndPointType.LOCAL
+        and src.path == dst.path
+    ):
+        print(f"{YELLOW}[relay]{RESET} Source and Destination paths are identical.")
         return
 
-    # 4. execute
+    print(f"{BLUE}[relay]{RESET} Resolving endpoints:")
+    print(f"    Source:      {YELLOW}{src.raw}{RESET} [{src.type.name}]")
+    print(f"    Destination: {YELLOW}{dst.raw}{RESET} [{dst.type.name}]")
+
+    # 1. Fetch manifests / DB records
+    if src.type == EndPointType.LOCAL:
+        src_db = scan_local_dir(src.path, verbose=False)
+        src_rows = fetch_all_db(src_db)
+    else:
+        raise NotImplementedError(
+            f"Remote source {src.type.name} is not implemented yet."
+        )
+
+    if dst.type == EndPointType.LOCAL:
+        dst_db = scan_local_dir(dst.path, verbose=False)
+        dst_rows = fetch_all_db(dst_db)
+    else:
+        raise NotImplementedError(
+            f"Remote destination {dst.type.name} is not implemented yet."
+        )
+
+    # 2. Compute DiffPlan
+    plan = compute_diff(src_rows, dst_rows)
+
+    # 3. Print the diff table
+    print_diff(plan)
+
+    # 4. Resolve transport adapter
+    adapter = get_adapter(src, dst)
+
+    # 5. Hand off to SyncExecutor (handles dry-run, prompt, and execution)
+    executor = SyncExecutor(plan, dry_run=args.dry_run, delete=args.delete)
+    executor.execute(dst_db=dst_db, transport_adapter=adapter)
 
 
 def handle_status(args):
+    """
+    Inspect a target endpoint, scan files, and display current state.
+    """
+    endpoint = parse_endpoint(args.target)
     print(
-        f"{BLUE}[relay]{RESET} Status check for\
-        {args.target}"
+        f"{BLUE}[relay]{RESET} Status check for: "
+        f"{YELLOW}{endpoint.raw}{RESET} ({endpoint.type.name})"
     )
 
-    # Inspect ledger and manifest
+    if endpoint.type == EndPointType.LOCAL:
+        db = scan_local_dir(endpoint.path, verbose=True)
+        count = db.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+        print(f"\n{BLUE}[ledger]{RESET} Tracked files in {endpoint.path}: {count}")
+        db.close()
+    else:
+        print(
+            f"Remote status inspection for {endpoint.type.name} "
+            "will be handled by adapters."
+        )
 
 
 def main():
@@ -88,3 +130,7 @@ def main():
     except Exception as e:
         print(f"{RED}[error]{RESET} {e}", file=sys.stderr)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
