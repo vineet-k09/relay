@@ -4,6 +4,7 @@ Execution Order: Moves -> Copies -> Transfers (Added/Modified) -> Deletions (--d
 """
 
 import sqlite3
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 from relay.adapters.base import BaseAdapters
@@ -67,47 +68,54 @@ class SyncExecutor:
         return True
 
     def execute(
-        self, dst_db: sqlite3.Connection, transport_adapter: BaseAdapters
+        self, dst_db: sqlite3.Connection | None, transport_adapter: BaseAdapters
     ) -> SyncStats:
         """Executes operations in safe topological order and updates DB state."""
         if not self.confirm_plan():
             return self.stats
 
-        with dst_db:
-            # 1. MOVED: Rename on destination and update path in DB
+        db_context = dst_db if dst_db is not None else nullcontext()
+        with db_context:
+            # 1. MOVED: Rename on destination and update path in DB (if DB present)
             for move in self.plan.moves:
                 transport_adapter.rename(move.origin_path, move.path)
-                update_path_db(dst_db, old_path=move.origin_path, new_path=move.path)
+                if dst_db is not None:
+                    update_path_db(
+                        dst_db, old_path=move.origin_path, new_path=move.path
+                    )
                 self.stats.moved += 1
 
             # 2. COPIED: Clone existing destination file locally
             for copy_item in self.plan.copies:
                 transport_adapter.copy_local(copy_item.origin_path, copy_item.path)
-                copy_path_db(
-                    dst_db, src_path=copy_item.origin_path, dst_path=copy_item.path
-                )
+                if dst_db is not None:
+                    copy_path_db(
+                        dst_db, src_path=copy_item.origin_path, dst_path=copy_item.path
+                    )
                 self.stats.copied += 1
 
             # 3. TRANSFERS: Added / Modified
             for transfer in self.plan.transfers:
                 meta = transport_adapter.transfer(transfer.path)
-                insert_db(
-                    dst_db,
-                    path=transfer.path,
-                    dev=meta.dev or 0,
-                    inode=meta.inode or 0,
-                    size=meta.size,
-                    mtime=meta.mtime or 0,
-                    hash=meta.blake3_hash or transfer.hash,
-                    crc32c=meta.crc32c or "",
-                )
+                if dst_db is not None:
+                    insert_db(
+                        dst_db,
+                        path=transfer.path,
+                        dev=meta.dev or 0,
+                        inode=meta.inode or 0,
+                        size=meta.size,
+                        mtime=meta.mtime or 0,
+                        hash=meta.blake3_hash or transfer.hash,
+                        crc32c=meta.crc32c or "",
+                    )
                 self.stats.transferred += 1
 
             # 4. DELETED: Prune if delete flag is set
             if self.delete:
                 for deletion in self.plan.deletions:
                     transport_adapter.delete(deletion.path)
-                    delete_path_db(dst_db, deletion.path)
+                    if dst_db is not None:
+                        delete_path_db(dst_db, deletion.path)
                     self.stats.deleted += 1
 
         self.stats.skipped = len(self.plan.unchanged)

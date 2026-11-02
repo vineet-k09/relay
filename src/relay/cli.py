@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from relay.adapters import get_adapter
+from relay.adapters.gcs import list_gcs_manifest
 from relay.core.diff import compute_diff
 from relay.core.endpoint import EndPointType, parse_endpoint
 from relay.core.scanner import scan_local_dir
@@ -63,10 +64,15 @@ def handle_sync(args):
     print(f"    Source:      {YELLOW}{src.raw}{RESET} [{src.type.name}]")
     print(f"    Destination: {YELLOW}{dst.raw}{RESET} [{dst.type.name}]")
 
+    is_gcs_involved = src.type == EndPointType.GCS or dst.type == EndPointType.GCS
+
     # 1. Fetch manifests / DB records
     if src.type == EndPointType.LOCAL:
         src_db = scan_local_dir(src.path, verbose=False)
-        src_rows = fetch_all_db(src_db)
+        src_rows = fetch_all_db(src_db, use_crc=is_gcs_involved)
+    elif src.type == EndPointType.GCS:
+        src_db = None
+        src_rows = list_gcs_manifest(src.bucket or "", src.path)
     else:
         raise NotImplementedError(
             f"Remote source {src.type.name} is not implemented yet."
@@ -74,7 +80,10 @@ def handle_sync(args):
 
     if dst.type == EndPointType.LOCAL:
         dst_db = scan_local_dir(dst.path, verbose=False)
-        dst_rows = fetch_all_db(dst_db)
+        dst_rows = fetch_all_db(dst_db, use_crc=is_gcs_involved)
+    elif dst.type == EndPointType.GCS:
+        dst_db = None
+        dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
     else:
         raise NotImplementedError(
             f"Remote destination {dst.type.name} is not implemented yet."
@@ -109,6 +118,14 @@ def handle_status(args):
         count = db.execute("SELECT COUNT(*) FROM files").fetchone()[0]
         print(f"\n{BLUE}[ledger]{RESET} Tracked files in {endpoint.path}: {count}")
         db.close()
+    elif endpoint.type == EndPointType.GCS:
+        rows = list_gcs_manifest(endpoint.bucket or "", endpoint.path)
+        print(
+            f"\n{BLUE}[gcs]{RESET} Tracked objects in "
+            f"gs://{endpoint.bucket}/{endpoint.path or ''}: {len(rows)}"
+        )
+        for path, file_crc in rows:
+            print(f"  • {path} [crc32c: {file_crc}]")
     else:
         print(
             f"Remote status inspection for {endpoint.type.name} "

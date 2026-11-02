@@ -113,12 +113,24 @@ make run
 
 ---
 
+## 📚 Documentation
+
+Detailed technical documentation and guides are available in the [`docs/`](docs/README.md) directory:
+
+- 🏗️ **[Architecture & Design](docs/architecture.md)** — System layers, data flow, SQLite state ledger (`.relay.db`), and clean functional architecture.
+- ⚖️ **[Diff Engine & Scenarios](docs/diff-engine.md)** — Content-addressable diff logic, 7 sync classifications, and rollback / safety matrix.
+- 🚀 **[Transport Adapters](docs/transports.md)** — Low-level comparison (Local vs. GCS vs. SSH) and zero-egress optimizations.
+- 🧪 **[Testing & Sandbox Guide](docs/sandbox.md)** — Reproducible 5-scenario test sandbox, CLI walkthrough, and verification suite.
+- 📋 **[Project Context & Status](CONTEXT.md)** — Milestone tracker, implementation notes, and next steps.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] Initial local scanning and BLAKE3 hashing.
 - [x] SQLite-backed state ledger (`.relay.db`).
 - [x] `.relayignore` pattern matching.
-- [ ] Rename & move detection engine (content-addressable diffs).
+- [x] Rename & move detection engine (content-addressable diffs).
 - [ ] GCS adapter (`gcs://` bucket sync via google-cloud-storage).
 - [ ] GCP Workbench / SSH adapter (streamlined `gcloud compute ssh` / native SSH transport).
 - [ ] Bi-directional sync & conflict resolution.

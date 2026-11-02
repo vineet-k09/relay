@@ -4,7 +4,11 @@ sandbox:
 	python3 scripts/reset_sandbox.py
 
 db:
-	sqlite3 .relay.db
+	@if command -v sqlite3 >/dev/null 2>&1; then \
+		sqlite3 .relay.db; \
+	else \
+		uv run python -m sqlite3 .relay.db; \
+	fi
 run:
 	uv run relay
 reset:

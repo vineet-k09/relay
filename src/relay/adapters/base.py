@@ -42,6 +42,14 @@ class BaseAdapters(ABC):
         """Transfer a new or modified file from source to destination."""
         raise NotImplementedError
 
+    def transfer_batch(self, paths: list[str]) -> list[FileMetaData]:
+        """
+        Transfer multiple files from source to destination.
+        Default implementation calls transfer() sequentially.
+        Subclasses (e.g. GCS) can override to perform concurrent / parallel transfers.
+        """
+        return [self.transfer(p) for p in paths]
+
     @abstractmethod
     def delete(self, path: str) -> None:
         """Delete an orphaned file from the destination endpoint."""

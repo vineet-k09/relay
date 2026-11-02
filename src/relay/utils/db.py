@@ -92,6 +92,7 @@ def copy_path_db(db: Connection, src_path: str, dst_path: str) -> None:
     )
 
 
-def fetch_all_db(db: Connection) -> list[tuple[str, str]]:
-    """Fetch all (path, hash) entries from the database."""
-    return db.execute("SELECT path, hash FROM files").fetchall()
+def fetch_all_db(db: Connection, use_crc: bool = False) -> list[tuple[str, str]]:
+    """Fetch all (path, hash) or (path, crc32c) entries from the database."""
+    col = "crc32c" if use_crc else "hash"
+    return db.execute(f"SELECT path, COALESCE({col}, '') FROM files").fetchall()
