@@ -3,6 +3,7 @@ import sqlite3
 from relay.core.diff import Action, compute_diff
 from relay.shared.print_diff import print_diff
 
+
 def create_mock_dbs():
     """Builds two in-memory sqlite dbs covering all 5 core sync
     scenarios."""
@@ -40,6 +41,7 @@ def create_mock_dbs():
 
     return src, dst
 
+
 def test_mock_scenarios():
     src, dst = create_mock_dbs()
     source_rows = src.execute("SELECT path, hash FROM files").fetchall()
@@ -52,7 +54,7 @@ def test_mock_scenarios():
     assert len(plan.unchanged) == 1
     assert plan.unchanged[0].path == "docs/readme.md"
 
-    assert len(plan.moves) ==  1
+    assert len(plan.moves) == 1
     assert plan.moves[0].path == "src/core/utils.py"
     assert plan.moves[0].origin_path == "src/old_utils.py"
 
@@ -71,6 +73,7 @@ def test_mock_scenarios():
     assert res_by_path["src/core/utils.py"].action == Action.MOVED
     assert res_by_path["assets/logo.png"].action == Action.ADDED
     assert res_by_path["temp/cache.tmp"].action == Action.DELETED
+
 
 def test_db_helpers():
     from relay.utils.db import copy_path_db, init_db, insert_db, update_path_db

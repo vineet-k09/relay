@@ -8,9 +8,9 @@ Sets up a reproducible local sandbox to test Relay sync scenarios:
 - DELETED:   Orphan file exists only in destination.
 """
 
-from pathlib import Path
 import shutil
 import sys
+from pathlib import Path
 
 SANDBOX_DIR = Path("sandbox").resolve()
 SRC_DIR = SANDBOX_DIR / "source"
@@ -30,9 +30,13 @@ def create_sandbox():
 
     # 2. Populate Source files
     (SRC_DIR / "README.md").write_text("# Project Relay\nInitial documentation.\n")
-    (SRC_DIR / "data" / "train.csv").write_text("id,feature,label\n1,10.5,1\n2,20.2,0\n")
+    (SRC_DIR / "data" / "train.csv").write_text(
+        "id,feature,label\n1,10.5,1\n2,20.2,0\n"
+    )
     (SRC_DIR / "data" / "eval.csv").write_text("id,feature,label\n99,15.1,1\n")
-    (SRC_DIR / "models" / "config.json").write_text('{"learning_rate": 0.001, "epochs": 10}\n')
+    (SRC_DIR / "models" / "config.json").write_text(
+        '{"learning_rate": 0.001, "epochs": 10}\n'
+    )
 
     # 3. Populate Destination files to trigger diff scenarios
     # UNCHANGED: identical to source README.md
@@ -58,7 +62,9 @@ def create_sandbox():
     print("    ├── README.md")
     print("    ├── data/train.csv")
     print("    ├── old_config.json")
-    print("    └── temp/scratch.log        (will be: UNTRACKED / DELETED with --delete)")
+    print(
+        "    └── temp/scratch.log        (will be: UNTRACKED / DELETED with --delete)"
+    )
 
     print("\nTry it with:")
     print("  uv run relay sync sandbox/source sandbox/dest --dry-run")

@@ -5,6 +5,7 @@ from pathlib import Path
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.shared.hash import calculate_hashes
 
+
 class LocalTransportAdapter(BaseAdapters):
     """
     Handles local-to-local filesystem transfers, copies, renames, and deletions.

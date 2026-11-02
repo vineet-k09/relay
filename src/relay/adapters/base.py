@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+
 @dataclass
 class FileMetaData:
     path: str
@@ -10,6 +11,7 @@ class FileMetaData:
     inode: int | None = None
     blake3_hash: str | None = None
     crc32c: str | None = None
+
 
 class BaseAdapters(ABC):
     """

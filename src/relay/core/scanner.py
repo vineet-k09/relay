@@ -160,9 +160,7 @@ def scan_local_dir(
 
             old_hash = db_records[old_path]["hash"]
             old_crc = db_records[old_path]["crc32c"]
-            matched_moves.append(
-                (old_path, new_path, old_hash, old_crc, stat, "inode")
-            )
+            matched_moves.append((old_path, new_path, old_hash, old_crc, stat, "inode"))
 
     # Phase 4B: Hash Fallback Matching (when inode differs or cross-fs)
     vanished_by_size: dict[int, list[str]] = {}
