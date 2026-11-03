@@ -1,7 +1,7 @@
 # Relay — Project State & Context
 
-> **Last Updated:** 2026-11-02  
-> **Status:** Local-to-Local verified; GCS adapter implemented with unit tests; CI active with auto-formatting; tests, ruff, and mypy passing.
+> **Last Updated:** 2026-11-04  
+> **Status:** Local-to-Local & Local-to-GCS live verified; IAP loopback SSH connection validated on Windows; CI active with auto-formatting; tests, ruff, and mypy passing.
 
 ---
 

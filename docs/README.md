@@ -12,6 +12,8 @@ Welcome to the documentation for **Relay** — an environment-agnostic different
 | **[Diff Engine & Scenarios](diff-engine.md)** | Content-addressable diff logic, the 7 scenario classifications, and rollback / safety matrix. |
 | **[Transport Adapters](transports.md)** | Transport abstraction contract, low-level operations matrix (Local vs. GCS vs. SSH), and zero-egress transfers. |
 | **[Testing & Sandbox Guide](sandbox.md)** | Reproducible 5-scenario test harness, step-by-step CLI verification walkthrough, and developer QA workflows. |
+| **[GCP IAP & OpenSSH Guide](iap-ssh-guide.md)** | Complete guide to IAP loopback tunneling, Windows NTFS ACL `chmod 600`, OS Login username resolution, and `scp`. |
+| **[Security & Reversibility Assessment](security-and-reversibility.md)** | Enterprise security audit, zero-trust compliance, PuTTY compatibility, and rollback procedures. |
 | **[Project Context & Roadmap](../CONTEXT.md)** | High-level project state, completed milestones, and immediate development roadmap. |
 
 ---
