@@ -1,4 +1,4 @@
-.PHONY: db run reset test pytest lint format check sandbox
+.PHONY: db run reset test pytest lint format check sandbox test-local-to-gs-vois-shield-dry-run
 
 sandbox:
 	python3 scripts/reset_sandbox.py
@@ -27,3 +27,15 @@ check:
 	uv run ruff check
 	uv run ruff format --check
 	uv run mypy
+
+test-local-to-gs-vois-shield:
+	uv run relay sync \
+		~/security-awareness-platform/frontend/VShield/src/Pages/Training/ \
+		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
+		--delete
+
+test-local-to-gs-vois-shield-dry-run:
+	uv run relay sync \
+		~/security-awareness-platform/frontend/VShield/src/Pages/Training/ \
+		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
+		--dry-run
