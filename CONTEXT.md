@@ -1,7 +1,7 @@
 # Relay — Project State & Context
 
 > **Last Updated:** 2026-11-04  
-> **Status:** Local-to-Local & Local-to-GCS live verified; IAP loopback SSH connection validated on Windows; CI active with auto-formatting; tests, ruff, and mypy passing.
+> **Status:** Local-to-Local, Local-to-GCS, Windows-to-Windows, and Bucket-to-Windows adapters implemented and verified; CI active; all tests, ruff, and mypy passing.
 
 ---
 
@@ -24,8 +24,10 @@ CLI Presentation Layer (cli.py)
        │
        └──> Execution Layer (core/sync.py -> SyncExecutor)
               └──> Transport Adapters:
-                     • LocalTransportAdapter (adapters/local.py)
-                     • GCSTransportAdapter (adapters/gcs.py)
+                     • LocalTransportAdapter (adapters/local.py) [Linux / Mac]
+                     • WindowsTransportAdapter (adapters/windows.py) [Windows / Cross-drive]
+                     • GCSTransportAdapter (adapters/gcs.py) [Linux <-> GCS]
+                     • GCSWindowsTransportAdapter (adapters/windows.py) [Windows <-> GCS]
 ```
 
 ---
@@ -48,7 +50,20 @@ CLI Presentation Layer (cli.py)
    - CRC32C alignment: `hash.py` and `db.py` compute real base64 `google_crc32c` matching GCS headers.
    - Mocked unit tests added in `tests/test_gcs_adapter.py`.
 
-4. **Documentation Restructure**:
+4. **Windows & Cross-Filesystem Adapters (`src/relay/adapters/windows.py`)**:
+   - `WindowsTransportAdapter`: Specialized for Windows-to-Windows and cross-drive transfers (`C:` to `D:`).
+     - Cross-device fallback (`EXDEV` & `WinError 17`) to `shutil.move()` when moving across drives or partitions (e.g. Btrfs vs ext4).
+     - Retry loop with backoff for Windows sharing violations / file locks (`WinError 32`).
+     - Safe deletion of Windows read-only files (`WinError 5`) via `stat.S_IWRITE` permission reset.
+     - Pure Python native `shutil.copy2` with exact `mtime` preservation (preventing differential false-positives).
+   - `GCSWindowsTransportAdapter`: Specialized for Bucket-to-Windows (Download) and Windows-to-Bucket (Upload).
+     - Strict path normalization: automatically converts Windows backslashes `\` to canonical cloud forward slashes `/`.
+     - Windows-hardened local downloads with metadata preservation and hash verification.
+   - Dynamic routing in `adapters.get_adapter()`: automatically detects Windows OS (`os.name == 'nt'`) or Windows drive letters (`C:\`) and UNC shares (`\\`).
+   - Educational, beginner-friendly "why this is here" comments throughout.
+   - Unit tests added in `tests/test_windows_adapter.py` (12 total tests passing).
+
+5. **Documentation Restructure**:
    - Modularized documentation cleanly under `docs/` (`architecture.md`, `diff-engine.md`, `sandbox.md`, `transports.md`).
 
 ---

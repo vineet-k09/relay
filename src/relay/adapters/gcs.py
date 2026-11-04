@@ -14,6 +14,7 @@ Key GCS Principles:
     costing 0 egress network bandwidth!
 """
 
+import errno
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -117,10 +118,19 @@ class GCSTransportAdapter(BaseAdapters):
         """
         Combines bucket prefix with relative file path.
         Example: prefix='backup', rel_path='data/train.csv' -> 'backup/data/train.csv'
+
+        WHY WE CONVERT BACKSLASHES ('\\') TO FORWARD SLASHES ('/'):
+          - On Windows, file paths use backslashes (e.g., 'data\\train.csv').
+          - Cloud object stores (GCS, S3) strictly use forward slashes ('/')
+            to represent virtual folders.
+          - If backslashes were sent directly, GCS would interpret 'data\\train.csv'
+            as a flat filename with a backslash in its name instead of a folder.
         """
+        clean_rel = rel_path.replace("\\", "/").lstrip("/")
         if self.prefix:
-            return f"{self.prefix}/{rel_path}".lstrip("/")
-        return rel_path
+            clean_prefix = self.prefix.replace("\\", "/").strip("/")
+            return f"{clean_prefix}/{clean_rel}"
+        return clean_rel
 
     def rename(self, old_path: str, new_path: str) -> None:
         """
@@ -128,7 +138,8 @@ class GCSTransportAdapter(BaseAdapters):
 
         - If destination is GCS: Uses bucket.rename_blob() server-side
           (0 egress bytes!).
-        - If destination is Local: Uses os.replace() directly on disk.
+        - If destination is Local: Uses os.replace() directly on disk with fallback
+          for cross-filesystem moves (e.g., Btrfs vs ext4, or Windows C: vs D:).
         """
         if self.is_upload:
             # Destination is GCS
@@ -142,7 +153,14 @@ class GCSTransportAdapter(BaseAdapters):
             src_file = self.dst_root / old_path
             dst_file = self.dst_root / new_path
             dst_file.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(src_file, dst_file)
+            try:
+                os.replace(src_file, dst_file)
+            except OSError as err:
+                winerror = getattr(err, "winerror", None)
+                if winerror == 17 or err.errno in (errno.EXDEV, 17):
+                    shutil.move(str(src_file), str(dst_file))
+                else:
+                    raise
 
     def copy_local(self, origin_path: str, new_path: str) -> None:
         """
