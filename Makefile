@@ -39,3 +39,6 @@ test-local-to-gs-vois-shield-dry-run:
 		~/security-awareness-platform/frontend/VShield/src/Pages/Training/ \
 		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
 		--dry-run
+		
+py:
+	 pyinstaller --onefile relay/src/relay/cli.py 
