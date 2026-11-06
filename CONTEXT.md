@@ -95,3 +95,58 @@ uv run relay status sandbox/source
    - Support `.relayignore` files alongside defaults.
 4. **Safety & Rollback Trash**:
    - Backup directory for modified/deleted files before destructive execution.
+
+
+### trying this today since normal pyz doenst work as windows dont have <3.14, havent tried exe, tried copy and downloading the whole thing but the venv had linux executeables and wont work locally - the windows cant have pip install - or any install
+```bash
+(relay) vineet_kushwaha1@cloudshell:~/relay$ # Build the wheel
+uv build
+
+# Unzip the source package into staging (unzip only the app code folder)
+unzip -q dist/*.whl -d staging/
+Building source distribution...
+Building wheel from source distribution...
+Successfully built dist/relay-0.1.0.tar.gz
+Successfully built dist/relay-0.1.0-py3-none-any.whl
+(relay) vineet_kushwaha1@cloudshell:~/relay$ python3 -m zipapp staging -m "relay.cli:main" -o relay.pyz
+(relay) vineet_kushwaha1@cloudshell:~/relay$ 
+```
+
+with current version of relay
+```ps1
+PS C:\Users\KushwahaV2\Downloads> python .\relay.pyz status
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\__main__.py", line 2, in <module>
+    import relay.cli
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\cli.py", line 4, in <module>
+    from relay.adapters import get_adapter
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\__init__.py", line 12, in <module>
+    from relay.adapters.gcs import GCSTransportAdapter
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\gcs.py", line 23, in <module>
+    from google.cloud import storage  # type: ignore[import-untyped]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\__init__.py", line 35, in <module>
+    from google.cloud.storage.batch import Batch
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\batch.py", line 43, in <module>
+    from google.cloud import _helpers, exceptions
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\_helpers\__init__.py", line 49, in <module>
+    import google.auth.transport.requests
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\transport\requests.py", line 45, in <module>
+    from google.oauth2 import service_account
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\oauth2\service_account.py", line 78, in <module>
+    from google.auth import (
+    ...<8 lines>...
+    )
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\_service_account_info.py", line 20, in <module>
+    from google.auth import crypt, exceptions
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\__init__.py", line 40, in <module>
+    from google.auth.crypt import base, es, es256, rsa
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\es.py", line 20, in <module>
+    import cryptography.exceptions
+  File "C:\Users\KushwahaV2\Downloads\relay.pyz\cryptography\exceptions.py", line 9, in <module>
+    from cryptography.hazmat.bindings._rust import exceptions as rust_exceptions
+ImportError: cannot import name 'exceptions' from 'cryptography.hazmat.bindings._rust' (unknown location)
+PS C:\Users\KushwahaV2\Downloads>
+```

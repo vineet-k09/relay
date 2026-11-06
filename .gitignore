@@ -17,3 +17,4 @@ wheels/
 .relay.db
 .relay_dest.db
 sandbox/
+*staging/
