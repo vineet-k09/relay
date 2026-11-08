@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+
 a = Analysis(
     ['src/relay/cli.py'],
     pathex=[],
@@ -21,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='cli',
+    name='relay',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

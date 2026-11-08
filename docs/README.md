@@ -14,6 +14,7 @@ Welcome to the documentation for **Relay** — an environment-agnostic different
 | **[Testing & Sandbox Guide](sandbox.md)** | Reproducible 5-scenario test harness, step-by-step CLI verification walkthrough, and developer QA workflows. |
 | **[GCP IAP & OpenSSH Guide](iap-ssh-guide.md)** | Complete guide to IAP loopback tunneling, Windows NTFS ACL `chmod 600`, OS Login username resolution, and `scp`. |
 | **[Security & Reversibility Assessment](security-and-reversibility.md)** | Enterprise security audit, zero-trust compliance, PuTTY compatibility, and rollback procedures. |
+| **[Windows Deployment & Enterprise Execution](windows-deployment.md)** | Step-by-step guide for restricted corporate Windows environments (offline wheels, zero-pip extraction, and GitHub Actions `.exe`). |
 | **[Project Context & Roadmap](../CONTEXT.md)** | High-level project state, completed milestones, and immediate development roadmap. |
 
 ---

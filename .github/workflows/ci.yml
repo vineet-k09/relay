@@ -56,12 +56,13 @@ jobs:
         run: uv run mypy
 
   test:
-    name: Run Tests (${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Run Tests (${{ matrix.os }} - Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     needs: quality
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12", "3.13"]
     steps:
       - name: Checkout repository
@@ -80,3 +81,65 @@ jobs:
 
       - name: Run pytest
         run: uv run pytest -v
+
+  build-windows:
+    name: Build Windows Executable
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build Windows relay.exe with PyInstaller
+        run: uv run pyinstaller relay.spec
+
+      - name: Test relay.exe execution
+        run: .\dist\relay.exe --help
+
+      - name: Upload Windows Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-windows-x64
+          path: dist/relay.exe
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Build Linux relay binary with PyInstaller
+        run: uv run pyinstaller relay.spec
+
+      - name: Test relay execution
+        run: ./dist/relay --help
+
+      - name: Upload Linux Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-linux-x64
+          path: dist/relay

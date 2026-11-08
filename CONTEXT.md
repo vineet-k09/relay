@@ -97,56 +97,157 @@ uv run relay status sandbox/source
    - Backup directory for modified/deleted files before destructive execution.
 
 
-### trying this today since normal pyz doenst work as windows dont have <3.14, havent tried exe, tried copy and downloading the whole thing but the venv had linux executeables and wont work locally - the windows cant have pip install - or any install
-```bash
-(relay) vineet_kushwaha1@cloudshell:~/relay$ # Build the wheel
-uv build
+## 5. Windows Packaging, Portability & Enterprise Restrictions
 
-# Unzip the source package into staging (unzip only the app code folder)
-unzip -q dist/*.whl -d staging/
-Building source distribution...
-Building wheel from source distribution...
-Successfully built dist/relay-0.1.0.tar.gz
-Successfully built dist/relay-0.1.0-py3-none-any.whl
-(relay) vineet_kushwaha1@cloudshell:~/relay$ python3 -m zipapp staging -m "relay.cli:main" -o relay.pyz
-(relay) vineet_kushwaha1@cloudshell:~/relay$ 
-```
+### 5.1 The Corporate Problem Statement
+On enterprise Windows laptops (e.g. corporate proxy/firewalls, SSL inspection, Zscaler, or non-admin privileges):
+1. **Network install blocked**: `pip install` cannot reach external PyPI repositories.
+2. **EDR / Antivirus risk**: Running an unsigned, newly built standalone `.exe` (from PyInstaller) on a corporate-managed laptop can trigger **Endpoint Detection & Response (EDR)** alerts (e.g. CrowdStrike Falcon, Microsoft Defender ATP, Carbon Black) as an untrusted binary or suspicious dropper.
 
-with current version of relay
-```ps1
-PS C:\Users\KushwahaV2\Downloads> python .\relay.pyz status
-Traceback (most recent call last):
-  File "<frozen runpy>", line 198, in _run_module_as_main
-  File "<frozen runpy>", line 88, in _run_code
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\__main__.py", line 2, in <module>
-    import relay.cli
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\cli.py", line 4, in <module>
-    from relay.adapters import get_adapter
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\__init__.py", line 12, in <module>
-    from relay.adapters.gcs import GCSTransportAdapter
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\gcs.py", line 23, in <module>
-    from google.cloud import storage  # type: ignore[import-untyped]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\__init__.py", line 35, in <module>
-    from google.cloud.storage.batch import Batch
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\batch.py", line 43, in <module>
-    from google.cloud import _helpers, exceptions
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\_helpers\__init__.py", line 49, in <module>
-    import google.auth.transport.requests
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\transport\requests.py", line 45, in <module>
-    from google.oauth2 import service_account
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\oauth2\service_account.py", line 78, in <module>
-    from google.auth import (
-    ...<8 lines>...
-    )
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\_service_account_info.py", line 20, in <module>
-    from google.auth import crypt, exceptions
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\__init__.py", line 40, in <module>
-    from google.auth.crypt import base, es, es256, rsa
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\es.py", line 20, in <module>
-    import cryptography.exceptions
-  File "C:\Users\KushwahaV2\Downloads\relay.pyz\cryptography\exceptions.py", line 9, in <module>
-    from cryptography.hazmat.bindings._rust import exceptions as rust_exceptions
-ImportError: cannot import name 'exceptions' from 'cryptography.hazmat.bindings._rust' (unknown location)
-PS C:\Users\KushwahaV2\Downloads>
-```
+---
+
+### 5.2 Post-Mortem of Failed Attempts
+
+#### Attempt 1: Copying Linux `.venv` to Windows
+* **Symptom**: Executables and scripts in the `.venv` failed to execute on Windows.
+* **Root Cause**: Virtual environments are tightly coupled to the host OS. Linux venvs contain Linux ELF binary wrappers, POSIX symlinks, and `.so` shared libraries that Windows (PE/COFF) cannot execute.
+
+#### Attempt 2: Zipapp (`relay.pyz`) via Cloud Shell / Linux
+* **Build Steps Attempted**:
+  ```bash
+  uv build
+  unzip -q dist/*.whl -d staging/
+  python3 -m zipapp staging -m "relay.cli:main" -o relay.pyz
+  ```
+* **Failure on Windows**:
+  ```ps1
+  PS C:\Users\KushwahaV2\Downloads> python .\relay.pyz status
+  Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\__main__.py", line 2, in <module>
+      import relay.cli
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\cli.py", line 4, in <module>
+      from relay.adapters import get_adapter
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\__init__.py", line 12, in <module>
+      from relay.adapters.gcs import GCSTransportAdapter
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\relay\adapters\gcs.py", line 23, in <module>
+      from google.cloud import storage  # type: ignore[import-untyped]
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\__init__.py", line 35, in <module>
+      from google.cloud.storage.batch import Batch
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\storage\batch.py", line 43, in <module>
+      from google.cloud import _helpers, exceptions
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\cloud\_helpers\__init__.py", line 49, in <module>
+      import google.auth.transport.requests
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\transport\requests.py", line 45, in <module>
+      from google.oauth2 import service_account
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\oauth2\service_account.py", line 78, in <module>
+      from google.auth import (
+      ...<8 lines>...
+      )
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\_service_account_info.py", line 20, in <module>
+      from google.auth import crypt, exceptions
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\__init__.py", line 40, in <module>
+      from google.auth.crypt import base, es, es256, rsa
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\google\auth\crypt\es.py", line 20, in <module>
+      import cryptography.exceptions
+    File "C:\Users\KushwahaV2\Downloads\relay.pyz\cryptography\exceptions.py", line 9, in <module>
+      from cryptography.hazmat.bindings._rust import exceptions as rust_exceptions
+  ImportError: cannot import name 'exceptions' from 'cryptography.hazmat.bindings._rust' (unknown location)
+  PS C:\Users\KushwahaV2\Downloads>
+  ```
+* **Root Causes**:
+  1. **Binary Format Mismatch (ELF vs. PE)**:
+     Packages like `cryptography` (Rust), `blake3` (C/Rust), and `google-crc32c` (C) compile to platform-specific machine code. Building on Linux packaged Linux ELF `.so` libraries (`_rust.abi3.so`, `blake3.so`). Windows requires `.pyd` / `.dll` (PE32+).
+  2. **Python `zipimport` Limitation**:
+     Python's built-in `zipimport` engine can only import pure `.py` and `.pyc` files from inside a zip/pyz. It **cannot** dynamically load native C/Rust extensions (`.pyd` or `.so`) directly out of memory or a zip archive without physically extracting them to disk first.
+
+---
+
+### 5.3 Corporate-Safe Personal Solution: Offline Wheelhouse (EDR-Safe)
+
+To run Relay safely on a corporate Windows machine without triggering EDR alarms or needing internet pip:
+
+1. **Leverage the approved local Python**: Runs directly through the IT-approved `python.exe` already installed on the machine. No unrecognized `.exe` is executed.
+2. **Download Windows-compiled wheels offline on Linux / Cloud Shell**:
+   ```bash
+   # 1. Download all pre-compiled Windows x64 binary wheels from PyPI
+   mkdir -p windows_wheels
+   uv run pip download \
+     --platform win_amd64 \
+     --only-binary=:all: \
+     --python-version 3.12 \
+     --dest ./windows_wheels \
+     blake3 google-cloud-storage
+
+   # 2. Build the pure-Python Relay wheel
+   uv build
+   cp dist/*.whl ./windows_wheels/
+
+   # 3. Bundle into a single zip archive to transfer
+   zip -r windows_wheels.zip windows_wheels/
+   ```
+
+3. **Install completely offline on corporate Windows**:
+   Transfer `windows_wheels.zip` to Windows, extract it, and install without touching the corporate network:
+   ```powershell
+   # Install to user space (no admin privileges needed, no internet traffic)
+   python -m pip install --user --no-index --find-links .\windows_wheels relay
+   ```
+
+4. **Zero-Pip Fallback (if the `pip` executable itself is blocked by policy)**:
+   Because wheels are standard `.zip` archives, extract them directly into a local folder:
+   ```powershell
+   # Extract all dependency wheels into a local deps folder
+   Get-ChildItem .\windows_wheels\*.whl | ForEach-Object { Expand-Archive $_.FullName -DestinationPath .\deps -Force }
+
+   # Run Relay by pointing PYTHONPATH to deps and src
+   $env:PYTHONPATH=".\deps;.\src"
+   python -m relay.cli status C:\path\to\dir
+   ```
+
+---
+
+### 5.4 Summary of Final Commands on Windows (Do NOT run `python relay.pyz`)
+
+> [!CAUTION]
+> **Do not run `python relay.pyz status`!**  
+> Running `python relay.pyz status` will fail because Python's built-in `zipimport` engine cannot load native C/Rust extensions (`cryptography`, `blake3`, `google-crc32c`) directly from a zip/pyz file without unpacking them to disk.
+
+| Deployment Path | Context | Final Execution Command |
+| :--- | :--- | :--- |
+| **Option 1: Offline Wheels** *(Recommended)* | Corporate Windows machines | `relay status <path>`<br>*(or `python -m relay.cli status <path>`)* |
+| **Option 2: Zero-Pip Unpacked** | Corporate machines where `pip.exe` is banned | `$env:PYTHONPATH=".\deps;.\src"`<br>`python -m relay.cli status <path>` |
+| **Option 3: GitHub Actions `.exe`** | Personal or unrestricted machines | `.\relay.exe status <path>` |
+
+---
+
+### 5.5 CI Solution: GitHub Actions Hosted Windows Runner + PyInstaller Executable
+
+For personal/non-corporate machines, or for releasing official standalone binaries, GitHub Actions provides cloud-hosted Windows runners (`runs-on: windows-latest`).
+
+* **GitHub Actions Workflow (`.github/workflows/ci.yml`)**:
+  - **Matrix Testing**: Runs tests on both `ubuntu-latest` and `windows-latest` across Python 3.12 and 3.13.
+  - **Automated Windows Build (`build-windows` job)**:
+    1. Spins up a clean, official Windows 2022/2025 runner with unrestricted internet.
+    2. Installs dependencies and PyInstaller using `uv sync --all-groups`.
+    3. Runs PyInstaller:
+       ```powershell
+       uv run pyinstaller relay.spec
+       ```
+    4. Automatically uploads `dist/relay.exe` as a workflow artifact named `relay-windows-x64`.
+* **How to download the `.exe`**:
+  Navigate to GitHub repository -> **Actions** -> click latest run -> scroll to **Artifacts** -> download `relay-windows-x64`.
+
+---
+
+### 5.6 Build System Configuration State
+* **`pyproject.toml`**: Restored `build-system` to native `uv_build`:
+  ```toml
+  [build-system]
+  requires = ["uv_build>=0.12.2,<0.13.0"]
+  build-backend = "uv_build"
+  ```
+* **Dev Dependencies**: Added `pyinstaller>=6.22.3` to the `dev` dependency group for local/CI packaging.
+* **Makefile**: Added `build-bin: uv run pyinstaller relay.spec` target.

@@ -40,5 +40,5 @@ test-local-to-gs-vois-shield-dry-run:
 		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
 		--dry-run
 		
-py:
-	 pyinstaller --onefile relay/src/relay/cli.py 
+build-bin:
+	uv run pyinstaller relay.spec
