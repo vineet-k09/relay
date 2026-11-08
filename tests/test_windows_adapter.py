@@ -112,14 +112,14 @@ def test_windows_adapter_transfer(tmp_path):
     dst_dir.mkdir()
 
     test_file = src_dir / "data.csv"
-    test_file.write_text("col1,col2\n1,2\n")
+    test_file.write_bytes(b"col1,col2\n1,2\n")
 
     adapter = WindowsTransportAdapter(src_dir, dst_dir)
     meta = adapter.transfer("data.csv")
 
     assert (dst_dir / "data.csv").exists()
     assert meta.path == "data.csv"
-    assert meta.size == len("col1,col2\n1,2\n")
+    assert meta.size == len(b"col1,col2\n1,2\n")
     assert meta.blake3_hash is not None
     assert meta.crc32c is not None
 
