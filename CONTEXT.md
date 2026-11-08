@@ -1,7 +1,21 @@
 # Relay — Project State & Context
 
-> **Last Updated:** 2026-11-04  
-> **Status:** Local-to-Local, Local-to-GCS, Windows-to-Windows, and Bucket-to-Windows adapters implemented and verified; CI active; all tests, ruff, and mypy passing.
+> **Last Updated:** 2026-11-08  
+> **Status:** All 7 CI jobs passing (Ubuntu + Windows across Python 3.12 & 3.13; PyInstaller Windows `.exe` and Linux binary artifacts generated). CRLF newline issue in Windows test suite resolved.
+
+---
+
+## ⚠️ CRITICAL PAIR PROGRAMMING DIRECTIVE FOR AI ASSISTANTS
+
+> [!IMPORTANT]
+> **DO NOT write, edit, or commit codebase files directly unless the user explicitly asks you to.**
+>
+> The user understands and learns concepts significantly better by writing code word-by-word themselves from chat instructions and explanations rather than having the assistant edit files directly.
+>
+> **Default Assistant Behavior:**
+> - Provide clear, detailed code snippets, diffs, explanations, and file/line references directly in the chat response.
+> - Walk through the logic step-by-step so the user can implement the changes themselves.
+> - Only call file-editing, file-writing, or git commit tools if the user explicitly instructs you to write the code, make the edit, or commit on their behalf.
 
 ---
 
@@ -65,6 +79,11 @@ CLI Presentation Layer (cli.py)
 
 5. **Documentation Restructure**:
    - Modularized documentation cleanly under `docs/` (`architecture.md`, `diff-engine.md`, `sandbox.md`, `transports.md`).
+
+6. **Windows CRLF Test Stabilization & CI Artifact Generation**:
+   - Stabilized `tests/test_windows_adapter.py::test_windows_adapter_transfer` by writing binary payload (`write_bytes`) to avoid Windows CRLF newline expansion (`\r\n`), matching byte-for-byte size assertions across OS platforms.
+   - All 7 CI matrix jobs passing (`Lint & Format`, `Ubuntu 3.12/3.13`, `Windows 3.12/3.13`, `Build Linux Binary`, `Build Windows Executable`).
+   - GitHub Actions workflow (`.github/workflows/ci.yml`) automatically builds and archives standalone executables for both Linux (`relay-linux-x64`) and Windows (`relay-windows-x64`).
 
 ---
 
