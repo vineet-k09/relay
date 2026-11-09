@@ -18,3 +18,4 @@ wheels/
 .relay_dest.db
 sandbox/
 *staging/
+win_amd.whl/

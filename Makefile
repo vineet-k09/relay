@@ -42,3 +42,9 @@ test-local-to-gs-vois-shield-dry-run:
 		
 build-bin:
 	uv run pyinstaller relay.spec
+
+setup-win-whl:
+	mkdir -p win_amd64_whl && \
+	uv run pip download --platform win_amd64 --only-binary=:all: --python-version 3.14 --dest ./win_amd64_whl/ blake3 google-cloud-storage && \
+	zip -r relay_windows_whl.zip win_amd64_whl/ && \
+	rm -rf win_amd64_whl
