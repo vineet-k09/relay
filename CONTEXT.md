@@ -270,3 +270,39 @@ For personal/non-corporate machines, or for releasing official standalone binari
   ```
 * **Dev Dependencies**: Added `pyinstaller>=6.22.3` to the `dev` dependency group for local/CI packaging.
 * **Makefile**: Added `build-bin: uv run pyinstaller relay.spec` target.
+
+
+# Current issue
+vineet_kushwaha1@cloudshell:~/relay (vf-grp-gbissdbx-dev-1)$ uv run relay sync . "gcloud storage gs://vineetk/relay"
+[relay] Resolving endpoints:
+    Source:      . [LOCAL]
+    Destination: gcloud storage gs://vineetk/relay [GCS]
+[error] Unexpected response from metadata server: service account info is missing 'email' field.
+vineet_kushwaha1@cloudshell:~/relay (vf-grp-gbissdbx-dev-1)$ gcloud auth list
+gcloud config get-value account
+gcloud storage ls gs://vineetk/
+Credentialed Accounts
+
+ACTIVE: *
+ACCOUNT: vineet.kushwaha1@vodafone.com
+
+To set the active account, run:
+    $ gcloud config set account `ACCOUNT`
+
+Your active configuration is: [cloudshell-9798]
+vineet.kushwaha1@vodafone.com
+gs://vineetk/jtd/
+gs://vineetk/relay/
+gs://vineetk/static-poc/
+gs://vineetk/uiux/
+gs://vineetk/vois_hub/
+gs://vineetk/vois_shield/
+vineet_kushwaha1@cloudshell:~/relay (vf-grp-gbissdbx-dev-1)$ make sync-local-to-gs
+Project [relay]: 
+Dry run? [true]: 
+[relay] Resolving endpoints:
+    Source:      . [LOCAL]
+    Destination: gcloud storage gs://vineetk/relay [GCS]
+[error] Unexpected response from metadata server: service account info is missing 'email' field.
+make: *** [Makefile:34: sync-local-to-gs] Error 1
+vineet_kushwaha1@cloudshell:~/relay (vf-grp-gbissdbx-dev-1)$ 

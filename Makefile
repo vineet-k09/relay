@@ -84,3 +84,11 @@ setup-win-whl:
 	uv run pip download --platform win_amd64 --only-binary=:all: --python-version $$PYVER --dest ./win_amd64_whl/ blake3 google-cloud-storage && \
 	zip -r relay_windows_whl.zip win_amd64_whl/ && \
 	rm -rf win_amd64_whl
+
+
+project:
+	gcloud config set project vf-grp-gbissdbx-dev-1
+app-login:
+	gcloud auth application-default login
+login:
+	gcloud auth login
