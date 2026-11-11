@@ -13,7 +13,7 @@ from pathlib import Path
 from relay.shared.hash import calculate_hashes
 from relay.shared.ignored import IGNORED
 from relay.shared.styles import CYAN, GREEN, RED, RESET, YELLOW
-from relay.utils.db import delete_path_db, init_db, insert_db
+from relay.utils.db import delete_path_db, init_db, insert_db, to_sqlite_int
 
 DEFAULT_IGNORED = [
     ".relay.db*",
@@ -142,18 +142,18 @@ def scan_local_dir(
     # 4. Move / Rename Detection
     matched_moves = []
 
-    # Phase 4A: Fast Inode Matching (O(1) - instant for Linux/POSIX)
+    # Phase 4A: Fast Inode Matching (O(1) - instant for Linux/POSIX/Windows)
     vanished_by_inode: dict[tuple[int, int], list[str]] = {}
     for vp in vanished_paths:
-        dev = db_records[vp]["dev"]
-        ino = db_records[vp]["inode"]
-        if dev is not None and ino is not None and ino > 0:
+        dev = to_sqlite_int(db_records[vp]["dev"])
+        ino = to_sqlite_int(db_records[vp]["inode"])
+        if dev is not None and ino is not None and ino != 0:
             vanished_by_inode.setdefault((dev, ino), []).append(vp)
 
     for new_path, (_full_file, stat) in list(untracked.items()):
-        dev = stat.st_dev
-        ino = stat.st_ino
-        if vanished_by_inode.get((dev, ino)):
+        dev = to_sqlite_int(stat.st_dev)
+        ino = to_sqlite_int(stat.st_ino)
+        if dev is not None and ino is not None and vanished_by_inode.get((dev, ino)):
             old_path = vanished_by_inode[(dev, ino)].pop(0)
             vanished_paths.remove(old_path)
             del untracked[new_path]
