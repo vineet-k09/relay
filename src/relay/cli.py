@@ -8,6 +8,7 @@ from relay.core.endpoint import EndPointType, parse_endpoint
 from relay.core.scanner import scan_local_dir
 from relay.core.sync import SyncExecutor
 from relay.shared.print_diff import print_diff
+from relay.shared.progress import spin
 from relay.shared.styles import BLUE, RED, RESET, YELLOW
 from relay.utils.db import fetch_all_db
 
@@ -68,22 +69,26 @@ def handle_sync(args):
 
     # 1. Fetch manifests / DB records
     if src.type == EndPointType.LOCAL:
-        src_db = scan_local_dir(src.path, verbose=False)
-        src_rows = fetch_all_db(src_db, use_crc=is_gcs_involved)
+        with spin(f"Scanning source ledger ({src.path})..."):
+            src_db = scan_local_dir(src.path, verbose=False)
+            src_rows = fetch_all_db(src_db, use_crc=is_gcs_involved)
     elif src.type == EndPointType.GCS:
-        src_db = None
-        src_rows = list_gcs_manifest(src.bucket or "", src.path)
+        with spin(f"Listing GCS bucket (gs://{src.bucket}/{src.path})..."):
+            src_db = None
+            src_rows = list_gcs_manifest(src.bucket or "", src.path)
     else:
         raise NotImplementedError(
             f"Remote source {src.type.name} is not implemented yet."
         )
 
     if dst.type == EndPointType.LOCAL:
-        dst_db = scan_local_dir(dst.path, verbose=False)
-        dst_rows = fetch_all_db(dst_db, use_crc=is_gcs_involved)
+        with spin(f"Scanning destination ledger ({dst.path})..."):
+            dst_db = scan_local_dir(dst.path, verbose=False)
+            dst_rows = fetch_all_db(dst_db, use_crc=is_gcs_involved)
     elif dst.type == EndPointType.GCS:
-        dst_db = None
-        dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
+        with spin(f"Listing GCS bucket (gs://{dst.bucket}/{dst.path})..."):
+            dst_db = None
+            dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
     else:
         raise NotImplementedError(
             f"Remote destination {dst.type.name} is not implemented yet."
@@ -119,7 +124,8 @@ def handle_status(args):
         print(f"\n{BLUE}[ledger]{RESET} Tracked files in {endpoint.path}: {count}")
         db.close()
     elif endpoint.type == EndPointType.GCS:
-        rows = list_gcs_manifest(endpoint.bucket or "", endpoint.path)
+        with spin(f"Listing gs://{endpoint.bucket}/{endpoint.path or ''}..."):
+            rows = list_gcs_manifest(endpoint.bucket or "", endpoint.path)
         print(
             f"\n{BLUE}[gcs]{RESET} Tracked objects in "
             f"gs://{endpoint.bucket}/{endpoint.path or ''}: {len(rows)}"

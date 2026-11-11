@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 from relay.adapters.base import BaseAdapters
 from relay.core.diff import DiffPlan
+from relay.shared.progress import ProgressBar
+from relay.shared.styles import BLUE, CYAN, GREEN, RED, RESET, YELLOW
 from relay.utils.db import copy_path_db, delete_path_db, insert_db, update_path_db
 
 
@@ -42,18 +44,21 @@ class SyncExecutor:
 
         print("\nPlanned changes:")
         if added_count:
-            print(f"  • {added_count} to add")
+            print(f"  • {GREEN}{added_count} to add{RESET}")
         if modified_count:
-            print(f"  • {modified_count} to modify")
+            print(f"  • {YELLOW}{modified_count} to modify{RESET}")
         if moved_count:
-            print(f"  • {moved_count} to move (zero network transfer)")
+            print(f"  • {CYAN}{moved_count} to move{RESET} (zero network transfer)")
         if copied_count:
-            print(f"  • {copied_count} to duplicate locally (zero network transfer)")
+            print(
+                f"  • {BLUE}{copied_count} to duplicate locally{RESET} "
+                "(zero network transfer)"
+            )
         if self.delete and deleted_count:
-            print(f"  • {deleted_count} to delete")
+            print(f"  • {RED}{deleted_count} to delete{RESET}")
         elif deleted_count:
             print(
-                f"  • {deleted_count} untracked on destination "
+                f"  • {YELLOW}{deleted_count} untracked on destination{RESET} "
                 "(kept, use --delete to prune)"
             )
 
@@ -95,37 +100,46 @@ class SyncExecutor:
                 self.stats.copied += 1
 
             # 3. TRANSFERS: Added / Modified
-            for transfer in self.plan.transfers:
-                meta = transport_adapter.transfer(transfer.path)
-                if dst_db is not None:
-                    insert_db(
-                        dst_db,
-                        path=transfer.path,
-                        dev=meta.dev or 0,
-                        inode=meta.inode or 0,
-                        size=meta.size,
-                        mtime=meta.mtime or 0,
-                        hash=meta.blake3_hash or transfer.hash,
-                        crc32c=meta.crc32c or "",
-                    )
-                self.stats.transferred += 1
+            if self.plan.transfers:
+                bar = ProgressBar(
+                    total=len(self.plan.transfers), prefix="Syncing files"
+                )
+                for transfer in self.plan.transfers:
+                    meta = transport_adapter.transfer(transfer.path)
+                    if dst_db is not None:
+                        insert_db(
+                            dst_db,
+                            path=transfer.path,
+                            dev=meta.dev or 0,
+                            inode=meta.inode or 0,
+                            size=meta.size,
+                            mtime=meta.mtime or 0,
+                            hash=meta.blake3_hash or transfer.hash,
+                            crc32c=meta.crc32c or "",
+                        )
+                    self.stats.transferred += 1
+                    bar.update(item_name=transfer.path)
 
             # 4. DELETED: Prune if delete flag is set
-            if self.delete:
+            if self.delete and self.plan.deletions:
+                del_bar = ProgressBar(
+                    total=len(self.plan.deletions), prefix="Pruning files"
+                )
                 for deletion in self.plan.deletions:
                     transport_adapter.delete(deletion.path)
                     if dst_db is not None:
                         delete_path_db(dst_db, deletion.path)
                     self.stats.deleted += 1
+                    del_bar.update(item_name=deletion.path)
 
         self.stats.skipped = len(self.plan.unchanged)
 
         print("\nSync completed successfully:")
-        print(f"  • {self.stats.transferred} transferred")
+        print(f"  • {GREEN}{self.stats.transferred} transferred{RESET}")
         if self.stats.moved:
-            print(f"  • {self.stats.moved} moved")
+            print(f"  • {CYAN}{self.stats.moved} moved{RESET}")
         if self.stats.copied:
-            print(f"  • {self.stats.copied} copied")
+            print(f"  • {BLUE}{self.stats.copied} copied{RESET}")
         if self.stats.deleted:
-            print(f"  • {self.stats.deleted} deleted")
+            print(f"  • {RED}{self.stats.deleted} deleted{RESET}")
         return self.stats
