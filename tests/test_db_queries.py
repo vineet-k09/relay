@@ -104,7 +104,8 @@ def test_db_helpers():
 def test_windows_large_st_dev_st_ino():
     """
     Verifies that Windows unsigned 64-bit metadata integers (e.g. st_dev > 2^63 - 1)
-    do not raise OverflowError: Python int too large to convert to SQLite INTEGER (Issue #1).
+    do not raise OverflowError: Python int too large to convert to SQLite
+    INTEGER (Issue #1).
     """
     from relay.utils.db import init_db, insert_db, to_sqlite_int
 
@@ -118,7 +119,9 @@ def test_windows_large_st_dev_st_ino():
     # Must insert without OverflowError
     insert_db(db, "package.whl", win_dev, win_ino, 218164, 1000, "hash_abc", "crc_123")
 
-    row = db.execute("SELECT dev, inode FROM files WHERE path = 'package.whl'").fetchone()
+    row = db.execute(
+        "SELECT dev, inode FROM files WHERE path = 'package.whl'"
+    ).fetchone()
     assert row is not None
     assert to_sqlite_int(row[0]) == to_sqlite_int(win_dev)
     assert to_sqlite_int(row[1]) == to_sqlite_int(win_ino)
@@ -129,4 +132,3 @@ def test_windows_large_st_dev_st_ino():
         assert wrapped is not None
         assert -(1 << 63) <= wrapped <= (1 << 63) - 1
         assert to_sqlite_int(wrapped) == wrapped
-
