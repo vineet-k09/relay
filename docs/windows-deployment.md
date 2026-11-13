@@ -43,30 +43,30 @@ On any Linux machine or Google Cloud Shell with unrestricted internet access:
 
 ```bash
 # 1. Create a wheelhouse directory
-mkdir -p windows_wheels
+mkdir -p win_amd64_whl
 
 # 2. Download all required pre-compiled Windows x64 wheels from PyPI
 uv run pip download \
   --platform win_amd64 \
   --only-binary=:all: \
   --python-version 3.12 \
-  --dest ./windows_wheels \
+  --dest ./win_amd64_whl \
   blake3 google-cloud-storage
 
 # 3. Build Relay's pure-Python wheel
 uv build
-cp dist/*.whl ./windows_wheels/
+cp dist/*.whl ./win_amd64_whl/
 
 # 4. Create a portable zip archive
-zip -r windows_wheels.zip windows_wheels/
+zip -r win_amd64_whl.zip win_amd64_whl/
 ```
 
 ### Step 2: Transfer and Install on Corporate Windows
-Transfer `windows_wheels.zip` to your Windows laptop (via USB, OneDrive, or approved transfer mechanism), extract the zip, and open PowerShell:
+Transfer `win_amd64_whl.zip` to your Windows laptop (via USB, OneDrive, or approved transfer mechanism), extract the zip, and open PowerShell:
 
 ```powershell
 # Install completely offline to user space (no admin rights, no network traffic)
-python -m pip install --user --no-index --find-links .\windows_wheels relay
+python -m pip install --user --no-index --find-links .\win_amd64_whl relay
 ```
 
 ### Step 3: Run Relay
@@ -96,7 +96,7 @@ If your enterprise security policy prevents executing `pip` altogether, you can 
 
 ```powershell
 # 1. Extract all wheels into a local dependency folder named 'deps'
-Get-ChildItem .\windows_wheels\*.whl | ForEach-Object { 
+Get-ChildItem .\win_amd64_whl\*.whl | ForEach-Object { 
     Expand-Archive $_.FullName -DestinationPath .\deps -Force 
 }
 

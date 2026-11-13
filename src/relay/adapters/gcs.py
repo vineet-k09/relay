@@ -17,15 +17,24 @@ Key GCS Principles:
 import errno
 import os
 import shutil
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from google.cloud import storage  # type: ignore[import-untyped]
+from google.oauth2.credentials import Credentials
 
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.core.endpoint import Endpoint, EndPointType
 from relay.shared.hash import calculate_hashes
 
+def get_gcloud_credentials() -> Crendentials:
+    """Uses print-access-token for Google Cloud APIs like GCS"""
+    token = subprocess.check_output(
+        ["gcloud", "auth", "print-access-token"],
+        text=True
+    ).strip()
+    return  Credentials(token=token)
 
 def list_gcs_manifest(
     bucket_name: str, prefix: str | None = None
@@ -44,7 +53,7 @@ def list_gcs_manifest(
     Returns:
         A list of (relative_path, crc32c_hash) tuples, ready for compute_diff().
     """
-    client = storage.Client()
+    client = storage.Client(credentials=get_gcloud_credentials())
     bucket = client.bucket(bucket_name)
 
     # Clean up prefix: remove leading/trailing slashes
@@ -97,7 +106,7 @@ class GCSTransportAdapter(BaseAdapters):
             src.type == EndPointType.GCS and dst.type == EndPointType.LOCAL
         )
 
-        self.client = storage.Client()
+        self.client = storage.Client(credentials=get_gcloud_credentials())
 
         if self.is_upload:
             # Upload: Source is Local directory, Destination is GCS bucket
