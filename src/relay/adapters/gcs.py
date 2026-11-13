@@ -30,14 +30,27 @@ from relay.shared.hash import calculate_hashes
 
 def get_gcloud_credentials() -> Credentials:
     """Uses print-access-token for Google Cloud APIs like GCS"""
+    gcloud_bin = shutil.which("gcloud") or "gcloud"
     token = subprocess.check_output(
-        ["gcloud", "auth", "print-access-token"],
+        [gcloud_bin, "auth", "print-access-token"],
+        shell=(os.name == "nt"),
         text=True
     ).strip()
 
     print(f"\nFetched logged user token ({len(token)} characters).")
     
     return  Credentials(token=token)
+
+def get_gcloud_project() -> str | None:
+    try: 
+        gcloud_bin = shutils.which("gcloud") or "gcloud"
+        return subprocess.check_output(
+            [gcloud_bin, "config", "get-value", "project"],
+            shell=(os.name=="nt"),
+            text=True
+        ).strip()
+    except Exception:
+        return None
 
 def list_gcs_manifest(
     bucket_name: str, prefix: str | None = None
@@ -56,7 +69,10 @@ def list_gcs_manifest(
     Returns:
         A list of (relative_path, crc32c_hash) tuples, ready for compute_diff().
     """
-    client = storage.Client(credentials=get_gcloud_credentials())
+    client = storage.Client(
+        project=get_gcloud_project(),
+        credentials=get_gcloud_credentials()
+    )
     bucket = client.bucket(bucket_name)
 
     # Clean up prefix: remove leading/trailing slashes
@@ -109,7 +125,10 @@ class GCSTransportAdapter(BaseAdapters):
             src.type == EndPointType.GCS and dst.type == EndPointType.LOCAL
         )
 
-        self.client = storage.Client(credentials=get_gcloud_credentials())
+        self.client = storage.Client(
+            project=get_gcloud_project(),
+            credentials=get_gcloud_credentials()
+        )
 
         if self.is_upload:
             # Upload: Source is Local directory, Destination is GCS bucket

@@ -78,6 +78,7 @@ build-bin: ## compile to bin build files
 setup-win-whl: ## setup win_amd64_whl for windows installation
 	@read -p "Python version (default 3.14): " PYVER; \
 	PYVER=$${PYVER:-3.14}; \
+	rm -rf dist win_amd64_whl win_amd64_whl.zip && \
 	mkdir -p win_amd64_whl && \
 	uv run pip download --platform win_amd64 --only-binary=:all: --python-version $$PYVER --dest ./win_amd64_whl/ blake3 google-cloud-storage && \
 	uv build && \
