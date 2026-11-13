@@ -1,5 +1,7 @@
 # Relay — Project State & Context
-
+```ps1
+requests.exceptions.ProxyError: HTTPSConnectionPool(host='storage.googleapis.com', port=443): Max retries exceeded with url: / (Caused by ProxyError('Unable to connect to proxy', SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1081)'))))
+```
 > **Last Updated:** 2026-11-08  
 > **Status:** All 7 CI jobs passing (Ubuntu + Windows across Python 3.12 & 3.13; PyInstaller Windows `.exe` and Linux binary artifacts generated). CRLF newline issue in Windows test suite resolved.
 
