@@ -27,30 +27,101 @@ from google.oauth2.credentials import Credentials
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.core.endpoint import Endpoint, EndPointType
 from relay.shared.hash import calculate_hashes
+from relay.shared.styles import BLUE, CYAN, RED, RESET, YELLOW
+
+
+def configure_windows_proxy() -> None:
+    """
+    Auto-detects and configures corporate proxy from gcloud if running on Windows.
+
+    WHY THIS EXISTS:
+      In corporate enterprise environments (e.g. Vodafone / Zscaler), outbound HTTPS
+      traffic is restricted and must pass through a forward proxy. While 'gcloud' CLI
+      has the corporate proxy configured, Python's standard requests/urllib3 does not
+      automatically discover it unless HTTPS_PROXY is set.
+
+      IMPORTANT PROXY SCHEME NOTE:
+      Always use 'http://' (never 'https://') for the proxy URL scheme, even for
+      HTTPS_PROXY (e.g. 'http://proxy:8080'). Forward proxies expect an unencrypted
+      HTTP CONNECT tunnel; giving 'https://' forces Python to attempt a TLS handshake
+      directly with the proxy port, resulting in SSLEOFError.
+    """
+    if os.name != "nt":
+        return
+
+    if "HTTPS_PROXY" not in os.environ and "https_proxy" not in os.environ:
+        try:
+            gcloud_bin = shutil.which("gcloud") or "gcloud"
+            addr = subprocess.check_output(
+                [gcloud_bin, "config", "get-value", "proxy/address"],
+                shell=True,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            port = subprocess.check_output(
+                [gcloud_bin, "config", "get-value", "proxy/port"],
+                shell=True,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+
+            if (
+                addr
+                and port
+                and addr not in ("(unset)", "")
+                and port not in ("(unset)", "")
+            ):
+                proxy_url = f"http://{addr}:{port}"
+                os.environ["HTTP_PROXY"] = proxy_url
+                os.environ["HTTPS_PROXY"] = proxy_url
+                print(f"{BLUE}[relay]{RESET} Corporate proxy configured: {proxy_url}")
+        except Exception:
+            pass
+
 
 def get_gcloud_credentials() -> Credentials:
-    """Uses print-access-token for Google Cloud APIs like GCS"""
-    gcloud_bin = shutil.which("gcloud") or "gcloud"
-    token = subprocess.check_output(
-        [gcloud_bin, "auth", "print-access-token"],
-        shell=(os.name == "nt"),
-        text=True
-    ).strip()
+    """
+    Retrieves Google Cloud credentials using 'gcloud auth print-access-token'.
 
-    print(f"\nFetched logged user token ({len(token)} characters).")
-    
-    return  Credentials(token=token)
+    Automatically configures Windows corporate proxy before fetching credentials.
+    """
+    configure_windows_proxy()
+    gcloud_bin = shutil.which("gcloud") or "gcloud"
+    try:
+        token = subprocess.check_output(
+            [gcloud_bin, "auth", "print-access-token"],
+            shell=(os.name == "nt"),
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+        print(f"{BLUE}[relay]{RESET} Using gcloud credentials (active session).")
+        return Credentials(token=token)
+    except Exception as exc:
+        print(
+            f"{RED}[error]{RESET} Failed to retrieve Google Cloud token via 'gcloud'."
+        )
+        print(f"{YELLOW}[hint]{RESET} Make sure Google Cloud SDK is installed and run:")
+        print(f"       {CYAN}gcloud auth login{RESET}")
+        print(f"       {CYAN}gcloud auth application-default login{RESET}")
+        raise SystemExit(1) from exc
+
 
 def get_gcloud_project() -> str | None:
-    try: 
-        gcloud_bin = shutils.which("gcloud") or "gcloud"
-        return subprocess.check_output(
+    """Retrieves active Google Cloud project ID from gcloud config."""
+    try:
+        gcloud_bin = shutil.which("gcloud") or "gcloud"
+        project = subprocess.check_output(
             [gcloud_bin, "config", "get-value", "project"],
-            shell=(os.name=="nt"),
-            text=True
+            shell=(os.name == "nt"),
+            text=True,
+            stderr=subprocess.DEVNULL,
         ).strip()
+        if project and project not in ("(unset)", ""):
+            return project
+        return None
     except Exception:
         return None
+
 
 def list_gcs_manifest(
     bucket_name: str, prefix: str | None = None
@@ -70,8 +141,7 @@ def list_gcs_manifest(
         A list of (relative_path, crc32c_hash) tuples, ready for compute_diff().
     """
     client = storage.Client(
-        project=get_gcloud_project(),
-        credentials=get_gcloud_credentials()
+        project=get_gcloud_project(), credentials=get_gcloud_credentials()
     )
     bucket = client.bucket(bucket_name)
 
@@ -126,8 +196,7 @@ class GCSTransportAdapter(BaseAdapters):
         )
 
         self.client = storage.Client(
-            project=get_gcloud_project(),
-            credentials=get_gcloud_credentials()
+            project=get_gcloud_project(), credentials=get_gcloud_credentials()
         )
 
         if self.is_upload:

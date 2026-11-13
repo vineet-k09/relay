@@ -5,6 +5,7 @@ import blake3
 
 try:
     import google_crc32c
+
     _HAS_GOOGLE_CRC32C = True
 except ImportError:
     _HAS_GOOGLE_CRC32C = False

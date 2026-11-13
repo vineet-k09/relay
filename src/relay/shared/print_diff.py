@@ -1,5 +1,6 @@
 from .styles import BLUE, CYAN, GREEN, RED, RESET, YELLOW
 
+
 def print_diff(results):
     color_map = {
         "UNCHANGED": RESET,

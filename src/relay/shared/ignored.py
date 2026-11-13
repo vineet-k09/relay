@@ -4,6 +4,7 @@ from .styles import YELLOW
 
 IGNORE_FILE = Path(__file__).parent.parent / ".relayignore"
 
+
 def load_ignored():
     try:
         with open(IGNORE_FILE) as f:
@@ -13,5 +14,6 @@ def load_ignored():
             f"{YELLOW}No .relayignore file found, consider creating one to "
             "prevent node_modules, .git files from tracking"
         )
+
 
 IGNORED = load_ignored()
