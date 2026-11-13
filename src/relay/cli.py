@@ -60,13 +60,11 @@ def handle_sync(args):
     ):
         print(f"{YELLOW}[relay]{RESET} Source and Destination paths are identical.")
         return
-    print("[temp_print] is this working?")
     print(f"{BLUE}[relay]{RESET} Resolving endpoints:")
     print(f"    Source:      {YELLOW}{src.raw}{RESET} [{src.type.name}]")
     print(f"    Destination: {YELLOW}{dst.raw}{RESET} [{dst.type.name}]")
 
     is_gcs_involved = src.type == EndPointType.GCS or dst.type == EndPointType.GCS
-    print(f"[temp_print] is_gcs_involved: {is_gcs_involved}, src = {src.type}, dst = {dst.type}")
 
     # 1. Fetch manifests / DB records
     if src.type == EndPointType.LOCAL:
@@ -74,7 +72,6 @@ def handle_sync(args):
             src_db = scan_local_dir(src.path, verbose=False)
             src_rows = fetch_all_db(src_db, use_crc=is_gcs_involved)
     elif src.type == EndPointType.GCS:
-        print(f"[temp_print] spin up src is gcp")
         with spin(f"Listing GCS bucket (gs://{src.bucket}/{src.path})..."):
             src_db = None
             src_rows = list_gcs_manifest(src.bucket or "", src.path)
@@ -88,7 +85,6 @@ def handle_sync(args):
             dst_db = scan_local_dir(dst.path, verbose=False)
             dst_rows = fetch_all_db(dst_db, use_crc=is_gcs_involved)
     elif dst.type == EndPointType.GCS:
-        print(f"[temp_print] spin up dst is gcp")
         with spin(f"Listing GCS bucket (gs://{dst.bucket}/{dst.path})..."):
             dst_db = None
             dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
