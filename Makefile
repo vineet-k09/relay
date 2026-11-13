@@ -80,8 +80,11 @@ setup-win-whl: ## setup win_amd64_whl for windows installation
 	PYVER=$${PYVER:-3.14}; \
 	mkdir -p win_amd64_whl && \
 	uv run pip download --platform win_amd64 --only-binary=:all: --python-version $$PYVER --dest ./win_amd64_whl/ blake3 google-cloud-storage && \
-	zip -r relay_windows_whl.zip win_amd64_whl/ && \
-	rm -rf win_amd64_whl
+	uv build && \
+	cp dist/*.whl ./win_amd64_whl/ && \
+	zip -r win_amd64_whl.zip win_amd64_whl/ && \
+	rm -rf win_amd64_whl && \
+	cloudshell download win_amd64_whl.zip 
 
 # Setup
 project: ## set default gcloud project

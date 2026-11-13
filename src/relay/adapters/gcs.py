@@ -28,12 +28,15 @@ from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.core.endpoint import Endpoint, EndPointType
 from relay.shared.hash import calculate_hashes
 
-def get_gcloud_credentials() -> Crendentials:
+def get_gcloud_credentials() -> Credentials:
     """Uses print-access-token for Google Cloud APIs like GCS"""
     token = subprocess.check_output(
         ["gcloud", "auth", "print-access-token"],
         text=True
     ).strip()
+
+    print(f"\nFetched logged user token ({len(token)} characters).")
+    
     return  Credentials(token=token)
 
 def list_gcs_manifest(
