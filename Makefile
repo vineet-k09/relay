@@ -1,36 +1,47 @@
-.PHONY: db run reset test pytest lint format check sandbox
+.DEFAULT_GOAL := help
 
-sandbox:
+.PHONY: help sandbox db reset test lint format check check-tab-space sync-local-to-gs build-bin setup-win-whl project app-login login dev-to-nl
+
+help: ## show this help message
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+sandbox: ## create a temporary folder to test the commands
 	python3 scripts/reset_sandbox.py
 
-db:
+# Db
+db: ## starts .relay.db session
 	@if command -v sqlite3 >/dev/null 2>&1; then \
 		sqlite3 .relay.db; \
 	else \
 		uv run python -m sqlite3 .relay.db; \
 	fi
-run:
-	uv run relay
-reset:
+
+reset: ## reset database
 	rm -rf .relay.db
-test:
-	uv run python tests/test_db_queries.py
-pytest:
+
+# Lint & Test
+test: ## run test suite
 	uv run pytest -s
 
-lint:
+lint: ## lint check
 	uv run ruff check
-format:
+
+format: ## format check and fix
 	uv run ruff format
 	uv run ruff check --fix
-check:
+
+check: ## lint check, format check and fix
 	uv run ruff check
 	uv run ruff format --check
 	uv run mypy
 
+check-tab-space: ## verify Makefile format
+	cat -A Makefile
+
+# Sync
 PROJECT ?= relay
 DRY_RUN ?= true
-sync-local-to-gs:
+sync-local-to-gs: ## sync relay or vois-shield with gs bucket
 	@read -p "Project [relay]: " PROJECT; \
 	PROJECT=$${PROJECT:-relay}; \
 	read -p "Dry run? [true]: " DRY_RUN; \
@@ -60,24 +71,11 @@ sync-local-to-gs:
 	); \
 	uv run relay sync "$$SRC" "$$DST" $$FLAG
 
-test-local-to-gs-vois-shield:
-	uv run relay sync \
-		~/security-awareness-platform/frontend/VShield/src/Pages/Training/ \
-		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
-		--delete
-l-to-gs-relay-sync:
-	uv run relay sync . "gcloud storage gs://vineetk/relay" --delete
-
-test-local-to-gs-vois-shield-dry-run:
-	uv run relay sync \
-		~/security-awareness-platform/frontend/VShield/src/Pages/Training/ \
-		"gcloud storage gs://vineetk/vois_shield/src/Pages/Training" \
-		--dry-run
-		
-build-bin:
+# Build
+build-bin: ## compile to bin build files
 	uv run pyinstaller relay.spec
 
-setup-win-whl:
+setup-win-whl: ## setup win_amd64_whl for windows installation
 	@read -p "Python version (default 3.14): " PYVER; \
 	PYVER=$${PYVER:-3.14}; \
 	mkdir -p win_amd64_whl && \
@@ -85,10 +83,14 @@ setup-win-whl:
 	zip -r relay_windows_whl.zip win_amd64_whl/ && \
 	rm -rf win_amd64_whl
 
-
-project:
+# Setup
+project: ## set default gcloud project
 	gcloud config set project vf-grp-gbissdbx-dev-1
-app-login:
+app-login: ## user application login
 	gcloud auth application-default login
-login:
+login: ## user login
 	gcloud auth login
+
+# Custom
+dev-to-nl: # sync folders vf-grp-mirep-dev/ to vf-grp-mirep-nonlive/
+	uv run relay sync ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-dev/mirep/vf-commentary-assistance-be/ ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-nonlive/mirep/vf-commentary-assistance-be/
