@@ -11,6 +11,7 @@ import re
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.adapters.gcs import GCSTransportAdapter
 from relay.adapters.local import LocalTransportAdapter
+from relay.adapters.ssh import SSHTransportAdapter
 from relay.adapters.windows import GCSWindowsTransportAdapter, WindowsTransportAdapter
 from relay.core.endpoint import Endpoint, EndPointType
 
@@ -71,9 +72,16 @@ def get_adapter(src: Endpoint, dst: Endpoint) -> BaseAdapters:
             return GCSWindowsTransportAdapter(src, dst)
         return GCSTransportAdapter(src, dst)
 
+    # 3. Local-to-SSH or SSH-to-Local (Workbench)
+    if (src.type == EndPointType.LOCAL and dst.type == EndPointType.SSH) or (
+        src.type == EndPointType.SSH and dst.type == EndPointType.LOCAL
+    ):
+        return SSHTransportAdapter(src, dst)
+
     raise NotImplementedError(
         f"Transport between {src.type.name} and {dst.type.name} "
-        "is not implemented yet. Currently supported: LOCAL <-> LOCAL, LOCAL <-> GCS."
+        "is not implemented yet. Currently supported: "
+        "LOCAL <-> LOCAL, LOCAL <-> GCS, LOCAL <-> SSH."
     )
 
 
@@ -83,6 +91,7 @@ __all__ = [
     "GCSTransportAdapter",
     "GCSWindowsTransportAdapter",
     "LocalTransportAdapter",
+    "SSHTransportAdapter",
     "WindowsTransportAdapter",
     "get_adapter",
 ]

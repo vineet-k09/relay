@@ -21,7 +21,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from google.cloud import storage  # type: ignore[import-untyped]
+from google.cloud import storage  # type: ignore
 from google.oauth2.credentials import Credentials
 
 from relay.adapters.base import BaseAdapters, FileMetaData

@@ -1,12 +1,12 @@
 ```ps1
 PS C:\Users\KushwahaV2\Downloads\relay\relay> gcloud config get-value proxy/address; gcloud config get-value proxy/port
-voispac.voisindiaproxy.internal.vodafone.com
+voispac.voisindiaproxy.internal.<company>.com
 8080
 ```
 
 ```ps1
-PS C:\Users\KushwahaV2\Downloads\relay\relay> $env:HTTP_PROXY = "http://voispac.voisindiaproxy.internal.vodafone.com:8080"
-PS C:\Users\KushwahaV2\Downloads\relay\relay> $env:HTTPS_PROXY = "http://voispac.voisindiaproxy.internal.vodafone.com:8080"
+PS C:\Users\KushwahaV2\Downloads\relay\relay> $env:HTTP_PROXY = "http://voispac.voisindiaproxy.internal.<company>.com:8080"
+PS C:\Users\KushwahaV2\Downloads\relay\relay> $env:HTTPS_PROXY = "http://voispac.voisindiaproxy.internal.<company>.com:8080"
 ```
 
 ```ps1

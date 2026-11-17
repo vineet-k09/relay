@@ -3,6 +3,7 @@ import sys
 
 from relay.adapters import get_adapter
 from relay.adapters.gcs import list_gcs_manifest
+from relay.adapters.ssh import list_ssh_manifest
 from relay.core.diff import compute_diff
 from relay.core.endpoint import EndPointType, parse_endpoint
 from relay.core.scanner import scan_local_dir
@@ -64,17 +65,24 @@ def handle_sync(args):
     print(f"    Source:      {YELLOW}{src.raw}{RESET} [{src.type.name}]")
     print(f"    Destination: {YELLOW}{dst.raw}{RESET} [{dst.type.name}]")
 
-    is_gcs_involved = src.type == EndPointType.GCS or dst.type == EndPointType.GCS
+    is_checksum_needed = src.type in (
+        EndPointType.GCS,
+        EndPointType.SSH,
+    ) or dst.type in (EndPointType.GCS, EndPointType.SSH)
 
     # 1. Fetch manifests / DB records
     if src.type == EndPointType.LOCAL:
         with spin(f"Scanning source ledger ({src.path})..."):
             src_db = scan_local_dir(src.path, verbose=False)
-            src_rows = fetch_all_db(src_db, use_crc=is_gcs_involved)
+            src_rows = fetch_all_db(src_db, use_crc=is_checksum_needed)
     elif src.type == EndPointType.GCS:
         with spin(f"Listing GCS bucket (gs://{src.bucket}/{src.path})..."):
             src_db = None
             src_rows = list_gcs_manifest(src.bucket or "", src.path)
+    elif src.type == EndPointType.SSH:
+        with spin(f"Listing SSH remote ({src.path})..."):
+            src_db = None
+            src_rows = list_ssh_manifest(src)
     else:
         raise NotImplementedError(
             f"Remote source {src.type.name} is not implemented yet."
@@ -83,11 +91,15 @@ def handle_sync(args):
     if dst.type == EndPointType.LOCAL:
         with spin(f"Scanning destination ledger ({dst.path})..."):
             dst_db = scan_local_dir(dst.path, verbose=False)
-            dst_rows = fetch_all_db(dst_db, use_crc=is_gcs_involved)
+            dst_rows = fetch_all_db(dst_db, use_crc=is_checksum_needed)
     elif dst.type == EndPointType.GCS:
         with spin(f"Listing GCS bucket (gs://{dst.bucket}/{dst.path})..."):
             dst_db = None
             dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
+    elif dst.type == EndPointType.SSH:
+        with spin(f"Listing SSH remote ({dst.path})..."):
+            dst_db = None
+            dst_rows = list_ssh_manifest(dst)
     else:
         raise NotImplementedError(
             f"Remote destination {dst.type.name} is not implemented yet."
@@ -129,6 +141,12 @@ def handle_status(args):
             f"\n{BLUE}[gcs]{RESET} Tracked objects in "
             f"gs://{endpoint.bucket}/{endpoint.path or ''}: {len(rows)}"
         )
+        for path, file_crc in rows:
+            print(f"  • {path} [crc32c: {file_crc}]")
+    elif endpoint.type == EndPointType.SSH:
+        with spin(f"Listing SSH remote ({endpoint.path})..."):
+            rows = list_ssh_manifest(endpoint)
+        print(f"\n{BLUE}[ssh]{RESET} Tracked files on {endpoint.raw}: {len(rows)}")
         for path, file_crc in rows:
             print(f"  • {path} [crc32c: {file_crc}]")
     else:

@@ -131,7 +131,7 @@ Detailed technical documentation and guides are available in the [`docs/`](docs/
 - [x] SQLite-backed state ledger (`.relay.db`).
 - [x] `.relayignore` pattern matching.
 - [x] Rename & move detection engine (content-addressable diffs).
-- [ ] GCS adapter (`gcs://` bucket sync via google-cloud-storage).
+- [x] GCS adapter (`gcs://` bucket sync via google-cloud-storage).
 - [ ] GCP Workbench / SSH adapter (streamlined `gcloud compute ssh` / native SSH transport).
 - [ ] Bi-directional sync & conflict resolution.
 - [ ] Watch mode (`relay watch <src> <dest>`) for live syncing.

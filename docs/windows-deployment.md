@@ -224,14 +224,14 @@ PS C:\Users\KushwahaV2\Downloads\relay\relay> ^C
 ### 5.7 Milestone: Corporate Windows <-> GCS Sync Verified (The Breakthrough)
 
 #### The Problem Anatomy
-When attempting to sync Google Cloud Storage buckets from a corporate Windows laptop (e.g. Vodafone network behind Zscaler / corporate proxy):
+When attempting to sync Google Cloud Storage buckets from a corporate Windows laptop:
 1. **Stale Wheel Caching**: `pip install` silently skipped re-installing Relay wheels with identical version numbers (`0.1.0`). Changes were not reflected until `--force-reinstall --no-deps` was supplied.
 2. **Direct Connection Timeout (120s)**: Python's `storage.Client()` attempted direct TCP connections on port 443 to `storage.googleapis.com`, which the corporate firewall silently blackholed.
 3. **The Proxy Protocol Trap (`SSLEOFError`)**: Setting `$env:HTTPS_PROXY="https://proxy:8080"` failed with `[SSL: UNEXPECTED_EOF_WHILE_READING]` because forward proxies expect an unencrypted HTTP `CONNECT` verb; using `https://` forced Python to attempt a TLS handshake directly with the proxy port.
 
 #### The Solution: Why It Works
 1. **Dynamic Proxy Alignment**:
-   - `gcloud` stores the corporate proxy at `gcloud config get-value proxy/address` and `proxy/port` (e.g. `voispac.voisindiaproxy.internal.vodafone.com:8080`).
+   - `gcloud` stores the corporate proxy at `gcloud config get-value proxy/address` and `proxy/port` (e.g. `voispac.voisindiaproxy.internal.<company>.com:8080`).
    - Forward proxies must always use the `http://` scheme for both `HTTP_PROXY` and `HTTPS_PROXY` (e.g. `http://voispac...:8080`).
    - Relay's `configure_windows_proxy()` in `src/relay/adapters/gcs.py` now automatically discovers and sets this in `os.environ` on Windows startup.
 2. **Access Token Passthrough**:
