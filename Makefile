@@ -21,7 +21,7 @@ reset: ## reset database
 
 # Lint & Test
 test: ## run test suite
-	uv run pytest -s
+	uv run pytest
 
 lint: ## lint check
 	uv run ruff check

@@ -15,5 +15,6 @@ def mock_gcloud_auth():
     with (
         patch("relay.adapters.gcs.get_gcloud_credentials", return_value=mock_creds),
         patch("relay.adapters.gcs.get_gcloud_project", return_value="mock-project"),
+        patch("relay.adapters.ssh.get_os_login_user", return_value="ci_test_user"),
     ):
         yield
