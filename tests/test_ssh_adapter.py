@@ -132,10 +132,12 @@ def test_ssh_adapter_transfer_upload(mock_run, tmp_path):
 def test_list_ssh_manifest(mock_run):
     # Mock remote python script returning json
     mock_proc = MagicMock()
-    mock_proc.stdout = json.dumps([
-        ["model.pt", "crc_model_123"],
-        ["utils/helper.py", "crc_helper_456"],
-    ])
+    mock_proc.stdout = json.dumps(
+        [
+            ["model.pt", "crc_model_123"],
+            ["utils/helper.py", "crc_helper_456"],
+        ]
+    )
     mock_run.return_value = mock_proc
 
     ep = parse_endpoint("ssh localhost:2222/home/jupyter/project")
