@@ -97,4 +97,4 @@ login: ## user login
 
 # Custom
 dev-to-nl: # sync folders vf-grp-mirep-dev/ to vf-grp-mirep-nonlive/
-	uv run relay sync ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-dev/mirep/vf-commentary-assistance-be/ ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-nonlive/mirep/vf-commentary-assistance-be/
+	uv run relay sync ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-nonlive/mirep/vf-commentary-assistance-fe/ ~/vf-grp-mi-pyramid/Dockerfiles/zeta/vf-grp-mirep-dev/mirep/vf-commentary-assistance-fe/
