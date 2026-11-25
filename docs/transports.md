@@ -37,12 +37,12 @@ class TransportAdapter(ABC):
 
 The table below contrasts how each underlying operation is executed across supported environments:
 
-| Operation | Local Filesystem (`LocalTransportAdapter`) | Google Cloud Storage (`GcsAdapter`) | GCP Workbench / SSH (`SshAdapter`) |
+| Operation | Local Filesystem (`LocalTransportAdapter`) | Google Cloud Storage (`GCSTransportAdapter`) | GCP Workbench / SSH (`SSHTransportAdapter`) |
 | :--- | :--- | :--- | :--- |
-| **`rename(old, new)`** | `os.replace(src, dst)`<br>*(Instant inode update)* | `bucket.rename_blob(blob, new_name)`<br>*(Server-side rename, 0 network bytes)* | `ssh.run("mv '{old}' '{new}'")`<br>*(Remote instant move)* |
-| **`copy_local(old, new)`** | `shutil.copy2(src, dst)`<br>*(Local file duplication)* | `bucket.copy_blob(blob, bucket, new_name)`<br>*(Server-side duplicate, 0 network bytes)* | `ssh.run("cp '{old}' '{new}'")`<br>*(Remote duplicate)* |
-| **`transfer(path)`** | Read from `src_root/path`, copy to `dst_root/path` | `bucket.blob(path).upload_from_filename(local_path)` | `sftp.put(local_path, remote_path)` |
-| **`delete(path)`** | `os.remove(path)` | `bucket.blob(path).delete()` | `ssh.run("rm '{path}'")` |
+| **`rename(old, new)`** | `os.replace(src, dst)`<br>*(Instant inode update)* | `bucket.rename_blob(blob, new_name)`<br>*(Server-side rename, 0 network bytes)* | `ssh ... "mv '{old}' '{new}'"`<br>*(Remote instant move)* |
+| **`copy_local(old, new)`** | `shutil.copy2(src, dst)`<br>*(Local file duplication)* | `bucket.copy_blob(blob, bucket, new_name)`<br>*(Server-side duplicate, 0 network bytes)* | `ssh ... "cp -p '{old}' '{new}'"`<br>*(Remote duplicate)* |
+| **`transfer(path)`** | Read from `src_root/path`, copy to `dst_root/path` | `bucket.blob(path).upload_from_filename(local_path)` | `scp -P <port>` *(or 1-shot `-z` batch zip via `python3 -m zipfile`)* |
+| **`delete(path)`** | `os.remove(path)` | `bucket.blob(path).delete()` | `ssh ... "rm -rf '{path}'"` |
 
 ---
 
@@ -61,23 +61,25 @@ Relay leverages native remote primitives whenever possible:
 Endpoints are parsed by `src/relay/core/endpoint.py` and routed via `src/relay/adapters/__init__.py`:
 
 ```python
-def get_adapter(src: Endpoint, dst: Endpoint) -> TransportAdapter:
-    if src.type == EndpointType.LOCAL and dst.type == EndpointType.LOCAL:
-        return LocalTransportAdapter(src.path, dst.path)
-    # Future adapters:
-    # elif dst.type == EndpointType.GCS:
-    #     return GcsAdapter(src, dst)
-    # elif dst.type == EndpointType.SSH:
-    #     return SshAdapter(src, dst)
-    raise NotImplementedError(
-        f"Sync between {src.type} and {dst.type} is not yet implemented."
-    )
+def get_adapter(src: Endpoint, dst: Endpoint) -> BaseAdapters:
+    is_windows = _is_windows_context(src, dst)
+    if src.type == EndPointType.LOCAL and dst.type == EndPointType.LOCAL:
+        return WindowsTransportAdapter(src.path, dst.path) if is_windows else LocalTransportAdapter(src.path, dst.path)
+    if (src.type == EndPointType.LOCAL and dst.type == EndPointType.GCS) or (
+        src.type == EndPointType.GCS and dst.type == EndPointType.LOCAL
+    ):
+        return GCSWindowsTransportAdapter(src, dst) if is_windows else GCSTransportAdapter(src, dst)
+    if (src.type == EndPointType.LOCAL and dst.type == EndPointType.SSH) or (
+        src.type == EndPointType.SSH and dst.type == EndPointType.LOCAL
+    ):
+        return SSHTransportAdapter(src, dst)
+    raise NotImplementedError(...)
 ```
 
 ### Supported Endpoint Schemes
 
 | Scheme | Example | Adapter | Status |
 | :--- | :--- | :--- | :--- |
-| **Local Paths** | `./data`, `/home/user/models`, `C:\project` | `LocalTransportAdapter` | ✅ Implemented |
-| **Google Cloud Storage** | `gcs://bucket-name/path`, `gs://bucket-name/path` | `GcsAdapter` | 🚧 Planned |
-| **GCP Workbench / SSH** | `ssh europe-west3/instance/path` | `SshAdapter` | 🚧 Planned |
+| **Local Paths** | `./data`, `/home/user/models`, `C:\project` | `LocalTransportAdapter` / `WindowsTransportAdapter` | ✅ Implemented |
+| **Google Cloud Storage** | `gcs://bucket-name/path`, `gs://bucket-name/path` | `GCSTransportAdapter` / `GCSWindowsTransportAdapter` | ✅ Implemented |
+| **GCP Workbench / SSH** | `ssh [user@]127.0.0.1:2222/path` or `ssh europe-west3/instance/path` | `SSHTransportAdapter` | ✅ Implemented |

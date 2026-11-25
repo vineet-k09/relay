@@ -1,9 +1,15 @@
 import errno
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 from relay.adapters.base import BaseAdapters, FileMetaData
+from relay.shared.archive import (
+    collect_file_metadata,
+    create_zip_from_paths,
+    extract_zip_safe,
+)
 from relay.shared.hash import calculate_hashes
 
 
@@ -96,6 +102,16 @@ class LocalTransportAdapter(BaseAdapters):
             blake3_hash=file_hash,
             crc32c=file_crc,
         )
+
+    def transfer_batch(self, paths: list[str]) -> list[FileMetaData]:
+        """Packs, copies, and extracts multiple files via a temporary zip bundle."""
+        if not paths:
+            return []
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = Path(tmp_dir) / "relay_batch.zip"
+            create_zip_from_paths(self.src_root, paths, zip_path)
+            extract_zip_safe(zip_path, self.dst_root)
+        return collect_file_metadata(self.dst_root, paths)
 
     def delete(self, path: str) -> None:
         """

@@ -1,7 +1,7 @@
 # Relay — Project State & Context
 
-> **Last Updated:** 2026-11-14  
-> **Status:** Live GCS <-> Windows corporate synchronization fully verified. All 57 files synced cleanly via native Python SDK with progress bar, multithreading, and CRC32C verification. Automated Windows proxy discovery and token passthrough implemented. All CI test suites stabilized.
+> **Last Updated:** 2026-11-25  
+> **Status:** All three core transport adapters (**Local**, **GCS**, and **SSH / GCP Workbench**) are implemented and verified. Live Windows <-> GCS and Windows <-> GCP Workbench (via IAP loopback `127.0.0.1:2222`) sync verified. Added `--clean` (`-c`) ledger cleanup, `--zip` (`-z`) batch-zip sync, `--zip-only` (`-Z`), and `--unzip` (`-u`). Python 3.12, 3.13, and 3.14 CI matrix green (35 tests passing).
 
 ---
 
@@ -31,6 +31,7 @@ CLI Presentation Layer (cli.py)
        ├──> Manifest Resolution:
        │      • Local: Scanner / SQLite Ledger (core/scanner.py & utils/db.py -> .relay.db)
        │      • GCS:   Instant bucket listing (adapters/gcs.py -> list_gcs_manifest)
+       │      • SSH:   Remote Python CRC32C walker (adapters/ssh.py -> list_ssh_manifest)
        │
        ├──> Diff Engine (core/diff.py -> DiffPlan) [Pure in-memory comparison]
        │
@@ -42,6 +43,7 @@ CLI Presentation Layer (cli.py)
                      • WindowsTransportAdapter (adapters/windows.py) [Windows / Cross-drive]
                      • GCSTransportAdapter (adapters/gcs.py) [Linux <-> GCS]
                      • GCSWindowsTransportAdapter (adapters/windows.py) [Windows <-> GCS]
+                     • SSHTransportAdapter (adapters/ssh.py) [Local <-> GCP Workbench / IAP]
 ```
 
 ---
@@ -93,6 +95,20 @@ CLI Presentation Layer (cli.py)
    - Added `tests/conftest.py` autouse mock fixture across unit test suites to guarantee CI test runs remain hermetic and independent of host gcloud authentication.
    - Confirmed live bidirectional verification: 57 files pulled from `gs://vineetk/relay/` to Windows NTFS with multithreaded downloads, live progress bar, and CRC32C checksum integrity (documented in `output/Gcs to Windows.md`).
 
+8. **SSH / GCP Workbench Transport Adapter (`src/relay/adapters/ssh.py`)**:
+   - Implemented zero-dependency native OpenSSH (`ssh` / `scp`) transport targeting GCP IAP loopback tunnels (`127.0.0.1:2222`) and `ssh zone/instance/path` URIs.
+   - Auto-discovers GCP OS Login usernames (`first_last_company_com`) and `~/.ssh/google_compute_engine` private keys (`tests/conftest.py` mocks `get_os_login_user` for hermetic CI).
+   - Remote Python one-liner (`list_ssh_manifest`) walks Workbench directories and computes CRC32C checksums matching local and GCS formats.
+   - Zero-egress remote `mv`, `cp -p`, and `rm -rf` operations, plus `_raise_ssh_error` stderr surfacing and `stdin=subprocess.DEVNULL` hardening.
+   - Verified live Windows -> GCP Workbench sync over IAP tunnel (`output/Windoes to SSH.md`).
+
+9. **Archive Batching & Ledger Cleanup Flags (`-z`, `-Z`, `-u`, `-c`)**:
+   - Added `--clean` / `-c` in `src/relay/cli.py` (`cleanup_local_db`) to close SQLite handles before unlinking `.relay.db` (preventing Windows `WinError 32`).
+   - Added `src/relay/shared/archive.py` (`create_zip_from_paths`, `extract_zip_safe` with zip-slip protection, `collect_file_metadata`).
+   - Added `--zip` / `-z` batch-zip mode via `SyncExecutor` + `transfer_batch()` (collapsing N file handshakes over IAP/SSH into 1 `scp` + 1 `ssh` unpack via `python3 -m zipfile`).
+   - Added `--zip-only` / `-Z` snapshot archive upload (ideal for GCS) and `--unzip` / `-u` extract-on-download.
+   - Expanded CI matrix in `.github/workflows/ci.yml` to Python 3.12, 3.13, and 3.14 across Ubuntu and Windows (35 total unit tests passing).
+
 ---
 
 ## 3. Quick Verification Commands
@@ -114,13 +130,12 @@ uv run relay status sandbox/source
 
 ## 4. Next Steps & Roadmap
 
-1. **Verify Windows -> GCS Upload Path**:
-   - Run live `relay sync . "gcloud storage gs://vineetk/relay"` from corporate Windows to verify outbound upload multithreading and CRC32C calculation.
-2. **SSH / GCP Workbench Adapter (`src/relay/adapters/ssh.py`)**:
-   - Remote execution of `mv`, `cp`, `rm` over SSH wrapper (`gcloud compute ssh`).
-3. **User-Configurable Ignore Rules**:
-   - Support `.relayignore` files alongside defaults.
-4. **Safety & Rollback Trash**:
+See [`Scope.md`](Scope.md) for the active backlog, including:
+1. **Verify Windows -> GCS Upload Path & Live `-z` Workbench Sync**:
+   - Confirm end-to-end `-z` batch-zip speedup over corporate IAP tunnel.
+2. **Streamlined Ignore Rules & CLI UX (`Scope.md` #3, #4, #6, #8, #9)**:
+   - Diff table indentation polish, endpoint aliases/variables, configurable `.relayignore` overrides, new-project confirmation vs. sync, and interactive command history.
+3. **Safety & Rollback Trash**:
    - Backup directory for modified/deleted files before destructive execution.
 
 
@@ -255,7 +270,7 @@ To run Relay safely on a corporate Windows machine without triggering EDR alarms
 For personal/non-corporate machines, or for releasing official standalone binaries, GitHub Actions provides cloud-hosted Windows runners (`runs-on: windows-latest`).
 
 * **GitHub Actions Workflow (`.github/workflows/ci.yml`)**:
-  - **Matrix Testing**: Runs tests on both `ubuntu-latest` and `windows-latest` across Python 3.12 and 3.13.
+  - **Matrix Testing**: Runs tests on both `ubuntu-latest` and `windows-latest` across Python 3.12, 3.13, and 3.14.
   - **Automated Windows Build (`build-windows` job)**:
     1. Spins up a clean, official Windows 2022/2025 runner with unrestricted internet.
     2. Installs dependencies and PyInstaller using `uv sync --all-groups`.

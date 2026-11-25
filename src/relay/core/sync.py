@@ -7,9 +7,10 @@ import sqlite3
 from contextlib import nullcontext
 from dataclasses import dataclass
 
-from relay.adapters.base import BaseAdapters
+from relay.adapters.base import BaseAdapters, FileMetaData
+from relay.adapters.gcs import GCSTransportAdapter
 from relay.core.diff import DiffPlan
-from relay.shared.progress import ProgressBar
+from relay.shared.progress import ProgressBar, spin
 from relay.shared.styles import BLUE, CYAN, GREEN, RED, RESET, YELLOW
 from relay.utils.db import copy_path_db, delete_path_db, insert_db, update_path_db
 
@@ -24,10 +25,17 @@ class SyncStats:
 
 
 class SyncExecutor:
-    def __init__(self, plan: DiffPlan, dry_run: bool = False, delete: bool = False):
+    def __init__(
+        self,
+        plan: DiffPlan,
+        dry_run: bool = False,
+        delete: bool = False,
+        zip_mode: bool = False,
+    ):
         self.plan = plan
         self.dry_run = dry_run
         self.delete = delete
+        self.zip_mode = zip_mode
         self.stats = SyncStats()
 
     def confirm_plan(self) -> bool:
@@ -72,6 +80,25 @@ class SyncExecutor:
 
         return True
 
+    def _record_transfer(
+        self,
+        dst_db: sqlite3.Connection | None,
+        path: str,
+        fallback_hash: str,
+        meta: FileMetaData,
+    ) -> None:
+        if dst_db is not None:
+            insert_db(
+                dst_db,
+                path=path,
+                dev=meta.dev or 0,
+                inode=meta.inode or 0,
+                size=meta.size,
+                mtime=meta.mtime or 0,
+                hash=meta.blake3_hash or fallback_hash,
+                crc32c=meta.crc32c or "",
+            )
+
     def execute(
         self, dst_db: sqlite3.Connection | None, transport_adapter: BaseAdapters
     ) -> SyncStats:
@@ -101,24 +128,44 @@ class SyncExecutor:
 
             # 3. TRANSFERS: Added / Modified
             if self.plan.transfers:
-                bar = ProgressBar(
-                    total=len(self.plan.transfers), prefix="Syncing files"
-                )
-                for transfer in self.plan.transfers:
-                    meta = transport_adapter.transfer(transfer.path)
-                    if dst_db is not None:
-                        insert_db(
-                            dst_db,
-                            path=transfer.path,
-                            dev=meta.dev or 0,
-                            inode=meta.inode or 0,
-                            size=meta.size,
-                            mtime=meta.mtime or 0,
-                            hash=meta.blake3_hash or transfer.hash,
-                            crc32c=meta.crc32c or "",
+                if self.zip_mode:
+                    if isinstance(transport_adapter, GCSTransportAdapter):
+                        print(
+                            f"{YELLOW}[warn]{RESET} GCS does not support server-side "
+                            "unzip; using multithreaded transfer "
+                            "(use -Z to upload as a .zip archive)."
                         )
-                    self.stats.transferred += 1
-                    bar.update(item_name=transfer.path)
+                        label = (
+                            f"Transferring {len(self.plan.transfers)} "
+                            "files to/from GCS..."
+                        )
+                    else:
+                        label = (
+                            f"Zipping, transferring, and unpacking "
+                            f"{len(self.plan.transfers)} files..."
+                        )
+
+                    hash_by_path = {t.path: t.hash for t in self.plan.transfers}
+                    with spin(label):
+                        metas = transport_adapter.transfer_batch(
+                            [t.path for t in self.plan.transfers]
+                        )
+                    for meta in metas:
+                        self._record_transfer(
+                            dst_db, meta.path, hash_by_path.get(meta.path, ""), meta
+                        )
+                        self.stats.transferred += 1
+                else:
+                    bar = ProgressBar(
+                        total=len(self.plan.transfers), prefix="Syncing files"
+                    )
+                    for transfer in self.plan.transfers:
+                        meta = transport_adapter.transfer(transfer.path)
+                        self._record_transfer(
+                            dst_db, transfer.path, transfer.hash, meta
+                        )
+                        self.stats.transferred += 1
+                        bar.update(item_name=transfer.path)
 
             # 4. DELETED: Prune if delete flag is set
             if self.delete and self.plan.deletions:

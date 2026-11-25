@@ -15,17 +15,25 @@ Connects seamlessly to GCP Workbench instances via:
   - Standard GCP compute keys (~/.ssh/google_compute_engine)
 """
 
+import contextlib
 import getpass
 import json
 import os
 import shlex
 import shutil
 import subprocess
+import tempfile
+import uuid
 from pathlib import Path
 from typing import NoReturn
 
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.core.endpoint import Endpoint, EndPointType
+from relay.shared.archive import (
+    collect_file_metadata,
+    create_zip_from_paths,
+    extract_zip_safe,
+)
 from relay.shared.hash import calculate_hashes
 
 
@@ -194,7 +202,9 @@ class SSHTransportAdapter(BaseAdapters):
             else get_default_ssh_key()
         )
 
-    def _run_ssh(self, remote_command: str) -> subprocess.CompletedProcess[str]:
+    def _run_ssh(
+        self, remote_command: str, input_text: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         """
         Executes a remote command via native OpenSSH.
         Uses BatchMode=yes to fail fast instead of hanging on password prompts.
@@ -213,6 +223,14 @@ class SSHTransportAdapter(BaseAdapters):
             remote_command,
         ]
         try:
+            if input_text is not None:
+                return subprocess.run(
+                    cmd,
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                    input=input_text,
+                )
             return subprocess.run(
                 cmd,
                 check=True,
@@ -370,3 +388,61 @@ class SSHTransportAdapter(BaseAdapters):
                 blake3_hash=file_hash,
                 crc32c=file_crc,
             )
+
+    def transfer_batch(self, paths: list[str]) -> list[FileMetaData]:
+        """
+        Transfers multiple files in a single compressed zip archive over SSH/SCP.
+
+        - Upload (Local -> SSH): packs locally -> 1 scp to /tmp -> 1 remote
+          'python3 -m zipfile -e' unpack + cleanup.
+        - Download (SSH -> Local): packs on remote into /tmp -> 1 scp -> remote
+          cleanup + local extraction.
+        """
+        if not paths:
+            return []
+
+        batch_name = f"relay_batch_{uuid.uuid4().hex[:8]}.zip"
+        remote_zip = f"/tmp/{batch_name}"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            local_zip = Path(tmp_dir) / batch_name
+
+            if self.is_upload:
+                create_zip_from_paths(self.local_root, paths, local_zip)
+                self._run_scp(str(local_zip), f"{self.user}@{self.host}:{remote_zip}")
+                unpack_cmd = (
+                    f"mkdir -p {shlex.quote(self.remote_root)} && "
+                    f"python3 -m zipfile -e {shlex.quote(remote_zip)} "
+                    f"{shlex.quote(self.remote_root)}; "
+                    f"rc=$?; rm -f {shlex.quote(remote_zip)}; exit $rc"
+                )
+                self._run_ssh(unpack_cmd)
+                return collect_file_metadata(self.local_root, paths)
+
+            # Download (SSH -> Local)
+            clean_paths = [p.replace("\\", "/").lstrip("/") for p in paths]
+            pack_script = (
+                "import json, os, sys, zipfile\n"
+                f"root = {json.dumps(self.remote_root)}\n"
+                f"zp = {json.dumps(remote_zip)}\n"
+                "paths = json.loads(sys.stdin.read())\n"
+                "with zipfile.ZipFile(\n"
+                "    zp, 'w', compression=zipfile.ZIP_DEFLATED\n"
+                ") as zf:\n"
+                "    for p in paths:\n"
+                "        fp = os.path.join(root, p)\n"
+                "        if os.path.isfile(fp):\n"
+                "            zf.write(fp, arcname=p)\n"
+            )
+            self._run_ssh(
+                f"python3 -c {shlex.quote(pack_script)}",
+                input_text=json.dumps(clean_paths),
+            )
+            try:
+                self._run_scp(f"{self.user}@{self.host}:{remote_zip}", str(local_zip))
+            finally:
+                with contextlib.suppress(Exception):
+                    self._run_ssh(f"rm -f {shlex.quote(remote_zip)}")
+
+            extract_zip_safe(local_zip, self.local_root)
+            return collect_file_metadata(self.local_root, paths)

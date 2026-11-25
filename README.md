@@ -54,15 +54,26 @@ relay sync . "gcs://vineetk/uploads/project1"
 relay sync "gcs://vineetk/uploads/project1" "ssh europe-west3/vineetk-instance/usr/project1 --no-tunnel"
 ```
 
-### 3. Sync Local to Remote Workbench
+### 3. Sync Local to Remote Workbench (IAP Loopback + Batch Zip)
 ```bash
-relay sync ./model_weights "ssh us-central1/jupyter-gpu/home/jupyter/model_weights"
+# Fast single-archive transfer over IAP tunnel (127.0.0.1:2222)
+relay sync ./model_weights "ssh <GCP_USERNAME>@127.0.0.1:2222/home/jupyter/model_weights" -z
 ```
 
 ### 4. Cloud Shell to GCS Bucket
 ```bash
 relay sync ~/repo "gcs://my-backup-bucket/repos/repo"
 ```
+
+### Common Sync Flags
+| Flag | Description |
+| :--- | :--- |
+| `-n`, `--dry-run` | Preview planned changes without transferring or modifying files |
+| `-d`, `--delete` | Prune files on the destination that no longer exist on source |
+| `-c`, `--clean` | Remove local `.relay.db` ledger files after sync finishes |
+| `-z`, `--zip` | Bundle transfers into a temp `.zip`, transfer once, and unpack on destination (ideal for SSH/IAP) |
+| `-Z`, `--zip-only` | Archive source into a single `.zip` on destination without unpacking (ideal for GCS snapshots) |
+| `-u`, `--unzip` | Extract downloaded `.zip` archive(s) into a local destination and remove the temp zip |
 
 ---
 
@@ -132,7 +143,7 @@ Detailed technical documentation and guides are available in the [`docs/`](docs/
 - [x] `.relayignore` pattern matching.
 - [x] Rename & move detection engine (content-addressable diffs).
 - [x] GCS adapter (`gcs://` bucket sync via google-cloud-storage).
-- [ ] GCP Workbench / SSH adapter (streamlined `gcloud compute ssh` / native SSH transport).
+- [x] GCP Workbench / SSH adapter (native OpenSSH/SCP over IAP loopback + `-z` batch-zip mode).
 - [ ] Bi-directional sync & conflict resolution.
 - [ ] Watch mode (`relay watch <src> <dest>`) for live syncing.
 

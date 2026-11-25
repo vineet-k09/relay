@@ -1,19 +1,22 @@
 import argparse
 import sqlite3
 import sys
+import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 from relay.adapters import get_adapter
 from relay.adapters.gcs import list_gcs_manifest
 from relay.adapters.ssh import list_ssh_manifest
 from relay.core.diff import compute_diff
-from relay.core.endpoint import EndPointType, parse_endpoint
+from relay.core.endpoint import Endpoint, EndPointType, parse_endpoint
 from relay.core.scanner import scan_local_dir
 from relay.core.sync import SyncExecutor
+from relay.shared.archive import create_zip_from_paths, extract_zip_safe
 from relay.shared.print_diff import print_diff
 from relay.shared.progress import spin
-from relay.shared.styles import BLUE, RED, RESET, YELLOW
-from relay.utils.db import fetch_all_db
+from relay.shared.styles import BLUE, CYAN, GREEN, RED, RESET, YELLOW
+from relay.utils.db import delete_path_db, fetch_all_db
 
 
 def parse_args():
@@ -47,6 +50,32 @@ def parse_args():
         action="store_true",
         help="Remove local .relay.db files after sync finishes",
     )
+    zip_group = sync_parser.add_mutually_exclusive_group()
+    zip_group.add_argument(
+        "--zip",
+        "-z",
+        action="store_true",
+        help=(
+            "Bundle transfers into a temporary zip, transfer once, "
+            "and unpack on destination"
+        ),
+    )
+    zip_group.add_argument(
+        "--zip-only",
+        "-Z",
+        action="store_true",
+        help=(
+            "Archive source files into a single .zip on destination without unpacking"
+        ),
+    )
+    sync_parser.add_argument(
+        "--unzip",
+        "-u",
+        action="store_true",
+        help=(
+            "Extract downloaded .zip archive(s) on local destination and remove the zip"
+        ),
+    )
 
     # relay status <target>
     status_parser = subparsers.add_parser(
@@ -59,9 +88,70 @@ def parse_args():
     return parser.parse_args()
 
 
+def handle_zip_only(src: Endpoint, dst: Endpoint, args) -> None:
+    """Packs a LOCAL source into a single .zip and uploads it without unpacking."""
+    if src.type != EndPointType.LOCAL:
+        raise ValueError("--zip-only (-Z) requires a LOCAL source directory.")
+
+    src_db = None
+    try:
+        with spin(f"Scanning source ledger ({src.path})..."):
+            src_db = scan_local_dir(src.path, verbose=False)
+            rel_paths = [p for p, _ in fetch_all_db(src_db)]
+
+        if not rel_paths:
+            print(f"{YELLOW}[relay]{RESET} No files found to archive.")
+            return
+
+        if dst.path.lower().endswith(".zip"):
+            if dst.type == EndPointType.LOCAL:
+                dst_p = Path(dst.path)
+                archive_name = dst_p.name
+                dst_dir_path = str(dst_p.parent)
+            else:
+                norm = dst.path.replace("\\", "/").rstrip("/")
+                if dst.type == EndPointType.GCS:
+                    norm = norm.lstrip("/")
+                archive_name = norm.rsplit("/", 1)[-1]
+                dst_dir_path = norm.rsplit("/", 1)[0] if "/" in norm else ""
+            dst_dir_ep = replace(dst, path=dst_dir_path)
+        else:
+            archive_name = f"{Path(src.path).name or 'relay_archive'}.zip"
+            dst_dir_ep = dst
+
+        print(
+            f"\nArchiving {GREEN}{len(rel_paths)}{RESET} files into "
+            f"{CYAN}{archive_name}{RESET} -> {YELLOW}{dst.raw}{RESET}"
+        )
+        if getattr(args, "dry_run", False):
+            print("\n[dry-run] Dry run active. No archive created or transferred.")
+            return
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = Path(tmp_dir) / archive_name
+            with spin(f"Packing {len(rel_paths)} files into {archive_name}..."):
+                create_zip_from_paths(Path(src.path), rel_paths, zip_path)
+
+            temp_src_ep = Endpoint(raw=tmp_dir, type=EndPointType.LOCAL, path=tmp_dir)
+            adapter = get_adapter(temp_src_ep, dst_dir_ep)
+            with spin(f"Uploading {archive_name}..."):
+                meta = adapter.transfer(archive_name)
+
+        print(f"\n{GREEN}Archive uploaded:{RESET} {archive_name} ({meta.size} bytes)")
+    finally:
+        if getattr(args, "clean", False):
+            cleanup_local_db(src_db, src.path)
+        elif src_db is not None:
+            src_db.close()
+
+
 def handle_sync(args):
     src = parse_endpoint(args.source)
     dst = parse_endpoint(args.destination)
+    zip_mode = getattr(args, "zip", False)
+    zip_only = getattr(args, "zip_only", False)
+    unzip_mode = getattr(args, "unzip", False)
+
     if (
         src.type == EndPointType.LOCAL
         and dst.type == EndPointType.LOCAL
@@ -73,10 +163,33 @@ def handle_sync(args):
     print(f"    Source:      {YELLOW}{src.raw}{RESET} [{src.type.name}]")
     print(f"    Destination: {YELLOW}{dst.raw}{RESET} [{dst.type.name}]")
 
+    if zip_only:
+        handle_zip_only(src, dst, args)
+        return
+
+    if unzip_mode and dst.type != EndPointType.LOCAL:
+        raise ValueError(
+            "--unzip (-u) requires a LOCAL destination directory; "
+            "use --zip (-z) for remote unpacking."
+        )
+
     is_checksum_needed = src.type in (
         EndPointType.GCS,
         EndPointType.SSH,
     ) or dst.type in (EndPointType.GCS, EndPointType.SSH)
+
+    single_zip_target: str | None = None
+    if (
+        unzip_mode
+        and src.type in (EndPointType.GCS, EndPointType.SSH)
+        and src.path.lower().endswith(".zip")
+    ):
+        norm = src.path.replace("\\", "/").rstrip("/")
+        if src.type == EndPointType.GCS:
+            norm = norm.lstrip("/")
+        single_zip_target = norm.rsplit("/", 1)[-1]
+        parent_dir = norm.rsplit("/", 1)[0] if "/" in norm else ""
+        src = replace(src, path=parent_dir)
 
     src_db = None
     dst_db = None
@@ -98,6 +211,9 @@ def handle_sync(args):
             raise NotImplementedError(
                 f"Remote source {src.type.name} is not implemented yet."
             )
+
+        if single_zip_target is not None:
+            src_rows = [(p, h) for p, h in src_rows if p == single_zip_target]
 
         if dst.type == EndPointType.LOCAL:
             with spin(f"Scanning destination ledger ({dst.path})..."):
@@ -126,8 +242,25 @@ def handle_sync(args):
         adapter = get_adapter(src, dst)
 
         # 5. Hand off to SyncExecutor (handles dry-run, prompt, and execution)
-        executor = SyncExecutor(plan, dry_run=args.dry_run, delete=args.delete)
-        executor.execute(dst_db=dst_db, transport_adapter=adapter)
+        executor = SyncExecutor(
+            plan, dry_run=args.dry_run, delete=args.delete, zip_mode=zip_mode
+        )
+        stats = executor.execute(dst_db=dst_db, transport_adapter=adapter)
+
+        if unzip_mode and not args.dry_run and stats.transferred > 0:
+            for t in plan.transfers:
+                if t.path.lower().endswith(".zip"):
+                    zip_file = Path(dst.path) / t.path
+                    if zip_file.is_file():
+                        extracted = extract_zip_safe(zip_file, zip_file.parent)
+                        zip_file.unlink()
+                        if dst_db is not None:
+                            delete_path_db(dst_db, t.path)
+                            dst_db.commit()
+                        print(
+                            f"  • {CYAN}Extracted {len(extracted)} files{RESET} "
+                            f"from {t.path} (removed temporary zip)"
+                        )
 
     finally:
         if args.clean:
