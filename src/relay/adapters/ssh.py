@@ -22,10 +22,19 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 from relay.adapters.base import BaseAdapters, FileMetaData
 from relay.core.endpoint import Endpoint, EndPointType
 from relay.shared.hash import calculate_hashes
+
+
+def _raise_ssh_error(action: str, exc: subprocess.CalledProcessError) -> NoReturn:
+    """Raises a clear RuntimeError including stderr/stdout from failed ssh/scp."""
+    detail = (exc.stderr or exc.stdout or "").strip()
+    raise RuntimeError(
+        f"{action} failed (exit {exc.returncode}): {detail or exc}"
+    ) from exc
 
 
 def get_default_ssh_key() -> Path:
@@ -79,7 +88,11 @@ def list_ssh_manifest(endpoint: Endpoint) -> list[tuple[str, str]]:
     host = endpoint.host or "127.0.0.1"
     port = endpoint.port or 2222
     user = endpoint.user or get_os_login_user()
-    key_file = Path(endpoint.key_file) if endpoint.key_file else get_default_ssh_key()
+    key_file = (
+        Path(endpoint.key_file).expanduser()
+        if endpoint.key_file
+        else get_default_ssh_key()
+    )
     remote_path = endpoint.path.replace("\\", "/").rstrip("/")
 
     # Embedded python script executed on the remote Workbench instance
@@ -132,12 +145,17 @@ def list_ssh_manifest(endpoint: Endpoint) -> list[tuple[str, str]]:
     ]
 
     try:
-        proc = subprocess.run(cmd, check=True, text=True, capture_output=True)
+        proc = subprocess.run(
+            cmd,
+            check=True,
+            text=True,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+        )
         items = json.loads(proc.stdout.strip())
         return [(item[0], item[1]) for item in items]
-    except Exception:
-        # If directory does not exist or connection fails, return empty manifest
-        return []
+    except subprocess.CalledProcessError as exc:
+        _raise_ssh_error("SSH manifest scan", exc)
 
 
 class SSHTransportAdapter(BaseAdapters):
@@ -171,7 +189,7 @@ class SSHTransportAdapter(BaseAdapters):
         self.port = self.ssh_ep.port or 2222
         self.user = self.ssh_ep.user or get_os_login_user()
         self.key_file = (
-            Path(self.ssh_ep.key_file)
+            Path(self.ssh_ep.key_file).expanduser()
             if self.ssh_ep.key_file
             else get_default_ssh_key()
         )
@@ -194,12 +212,16 @@ class SSHTransportAdapter(BaseAdapters):
             f"{self.user}@{self.host}",
             remote_command,
         ]
-        return subprocess.run(
-            cmd,
-            check=True,
-            text=True,
-            capture_output=True,
-        )
+        try:
+            return subprocess.run(
+                cmd,
+                check=True,
+                text=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError as exc:
+            _raise_ssh_error("SSH command", exc)
 
     def _run_scp(
         self, src_path: str, dst_path: str
@@ -222,12 +244,16 @@ class SSHTransportAdapter(BaseAdapters):
             src_path,
             dst_path,
         ]
-        return subprocess.run(
-            cmd,
-            check=True,
-            text=True,
-            capture_output=True,
-        )
+        try:
+            return subprocess.run(
+                cmd,
+                check=True,
+                text=True,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError as exc:
+            _raise_ssh_error("SCP transfer", exc)
 
     def _to_remote_path(self, rel_path: str) -> str:
         """Normalizes Windows backslashes to Linux forward slashes."""
@@ -311,7 +337,7 @@ class SSHTransportAdapter(BaseAdapters):
             self._run_ssh(f"mkdir -p {shlex.quote(remote_parent)}")
 
             # 2. scp local_file user@host:remote_dest
-            target = f"{self.user}@{self.host}:{shlex.quote(remote_dest)}"
+            target = f"{self.user}@{self.host}:{remote_dest}"
             self._run_scp(str(local_file), target)
 
             stat = local_file.stat()
@@ -330,7 +356,7 @@ class SSHTransportAdapter(BaseAdapters):
             remote_src = self._to_remote_path(clean_path)
 
             # scp user@host:remote_src local_file
-            source = f"{self.user}@{self.host}:{shlex.quote(remote_src)}"
+            source = f"{self.user}@{self.host}:{remote_src}"
             self._run_scp(source, str(local_file))
 
             stat = local_file.stat()

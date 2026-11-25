@@ -1,5 +1,7 @@
 import argparse
+import sqlite3
 import sys
+from pathlib import Path
 
 from relay.adapters import get_adapter
 from relay.adapters.gcs import list_gcs_manifest
@@ -38,6 +40,13 @@ def parse_args():
         action="store_true",
         help="Delete destination files not in source",
     )
+    # --c, --clean to delete .relay.db
+    sync_parser.add_argument(
+        "--clean",
+        "-c",
+        action="store_true",
+        help="Remove local .relay.db files after sync finishes",
+    )
 
     # relay status <target>
     status_parser = subparsers.add_parser(
@@ -53,7 +62,6 @@ def parse_args():
 def handle_sync(args):
     src = parse_endpoint(args.source)
     dst = parse_endpoint(args.destination)
-
     if (
         src.type == EndPointType.LOCAL
         and dst.type == EndPointType.LOCAL
@@ -70,53 +78,68 @@ def handle_sync(args):
         EndPointType.SSH,
     ) or dst.type in (EndPointType.GCS, EndPointType.SSH)
 
-    # 1. Fetch manifests / DB records
-    if src.type == EndPointType.LOCAL:
-        with spin(f"Scanning source ledger ({src.path})..."):
-            src_db = scan_local_dir(src.path, verbose=False)
-            src_rows = fetch_all_db(src_db, use_crc=is_checksum_needed)
-    elif src.type == EndPointType.GCS:
-        with spin(f"Listing GCS bucket (gs://{src.bucket}/{src.path})..."):
-            src_db = None
-            src_rows = list_gcs_manifest(src.bucket or "", src.path)
-    elif src.type == EndPointType.SSH:
-        with spin(f"Listing SSH remote ({src.path})..."):
-            src_db = None
-            src_rows = list_ssh_manifest(src)
-    else:
-        raise NotImplementedError(
-            f"Remote source {src.type.name} is not implemented yet."
-        )
+    src_db = None
+    dst_db = None
+    try:
+        # 1. Fetch manifests / DB records
+        if src.type == EndPointType.LOCAL:
+            with spin(f"Scanning source ledger ({src.path})..."):
+                src_db = scan_local_dir(src.path, verbose=False)
+                src_rows = fetch_all_db(src_db, use_crc=is_checksum_needed)
+        elif src.type == EndPointType.GCS:
+            with spin(f"Listing GCS bucket (gs://{src.bucket}/{src.path})..."):
+                src_db = None
+                src_rows = list_gcs_manifest(src.bucket or "", src.path)
+        elif src.type == EndPointType.SSH:
+            with spin(f"Listing SSH remote ({src.path})..."):
+                src_db = None
+                src_rows = list_ssh_manifest(src)
+        else:
+            raise NotImplementedError(
+                f"Remote source {src.type.name} is not implemented yet."
+            )
 
-    if dst.type == EndPointType.LOCAL:
-        with spin(f"Scanning destination ledger ({dst.path})..."):
-            dst_db = scan_local_dir(dst.path, verbose=False)
-            dst_rows = fetch_all_db(dst_db, use_crc=is_checksum_needed)
-    elif dst.type == EndPointType.GCS:
-        with spin(f"Listing GCS bucket (gs://{dst.bucket}/{dst.path})..."):
-            dst_db = None
-            dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
-    elif dst.type == EndPointType.SSH:
-        with spin(f"Listing SSH remote ({dst.path})..."):
-            dst_db = None
-            dst_rows = list_ssh_manifest(dst)
-    else:
-        raise NotImplementedError(
-            f"Remote destination {dst.type.name} is not implemented yet."
-        )
+        if dst.type == EndPointType.LOCAL:
+            with spin(f"Scanning destination ledger ({dst.path})..."):
+                dst_db = scan_local_dir(dst.path, verbose=False)
+                dst_rows = fetch_all_db(dst_db, use_crc=is_checksum_needed)
+        elif dst.type == EndPointType.GCS:
+            with spin(f"Listing GCS bucket (gs://{dst.bucket}/{dst.path})..."):
+                dst_db = None
+                dst_rows = list_gcs_manifest(dst.bucket or "", dst.path)
+        elif dst.type == EndPointType.SSH:
+            with spin(f"Listing SSH remote ({dst.path})..."):
+                dst_db = None
+                dst_rows = list_ssh_manifest(dst)
+        else:
+            raise NotImplementedError(
+                f"Remote destination {dst.type.name} is not implemented yet."
+            )
 
-    # 2. Compute DiffPlan
-    plan = compute_diff(src_rows, dst_rows)
+        # 2. Compute DiffPlan
+        plan = compute_diff(src_rows, dst_rows)
 
-    # 3. Print the diff table
-    print_diff(plan)
+        # 3. Print the diff table
+        print_diff(plan)
 
-    # 4. Resolve transport adapter
-    adapter = get_adapter(src, dst)
+        # 4. Resolve transport adapter
+        adapter = get_adapter(src, dst)
 
-    # 5. Hand off to SyncExecutor (handles dry-run, prompt, and execution)
-    executor = SyncExecutor(plan, dry_run=args.dry_run, delete=args.delete)
-    executor.execute(dst_db=dst_db, transport_adapter=adapter)
+        # 5. Hand off to SyncExecutor (handles dry-run, prompt, and execution)
+        executor = SyncExecutor(plan, dry_run=args.dry_run, delete=args.delete)
+        executor.execute(dst_db=dst_db, transport_adapter=adapter)
+
+    finally:
+        if args.clean:
+            if src.type == EndPointType.LOCAL:
+                cleanup_local_db(src_db, src.path)
+            if dst.type == EndPointType.LOCAL:
+                cleanup_local_db(dst_db, dst.path)
+        else:
+            if src_db is not None:
+                src_db.close()
+            if dst_db is not None:
+                dst_db.close()
 
 
 def handle_status(args):
@@ -154,6 +177,15 @@ def handle_status(args):
             f"Remote status inspection for {endpoint.type.name} "
             "will be handled by adapters."
         )
+
+
+def cleanup_local_db(db: sqlite3.Connection | None, root_path: str) -> None:
+    """Close SQLite connection and delete .relay.db (and any journal sidecars)."""
+    if db is not None:
+        db.close()
+    db_file = Path(root_path) / ".relay.db"
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        Path(f"{db_file}{suffix}").unlink(missing_ok=True)
 
 
 def main():

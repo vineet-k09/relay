@@ -1,8 +1,13 @@
 import json
+import subprocess
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from relay.adapters import get_adapter
 from relay.adapters.ssh import SSHTransportAdapter, list_ssh_manifest
+from relay.cli import handle_sync
 from relay.core.endpoint import EndPointType, parse_endpoint
 
 
@@ -147,3 +152,53 @@ def test_list_ssh_manifest(mock_run):
         ("model.pt", "crc_model_123"),
         ("utils/helper.py", "crc_helper_456"),
     ]
+
+
+@patch("subprocess.run")
+def test_list_ssh_manifest_surfaces_error(mock_run):
+    mock_run.side_effect = subprocess.CalledProcessError(
+        returncode=255,
+        cmd=["ssh"],
+        stderr="Host key verification failed.",
+    )
+
+    ep = parse_endpoint("ssh 127.0.0.1:2222/home/jupyter/project")
+    with pytest.raises(RuntimeError, match=r"Host key verification failed\."):
+        list_ssh_manifest(ep)
+
+
+@patch("subprocess.run")
+def test_ssh_adapter_surfaces_stderr(mock_run, tmp_path):
+    mock_run.side_effect = subprocess.CalledProcessError(
+        returncode=255,
+        cmd=["ssh"],
+        stderr="Permission denied (publickey).",
+    )
+
+    src = parse_endpoint(str(tmp_path))
+    dst = parse_endpoint("ssh 127.0.0.1:2222/home/jupyter/repo")
+    adapter = get_adapter(src, dst)
+
+    with pytest.raises(RuntimeError, match=r"Permission denied \(publickey\)\."):
+        adapter.delete("file.txt")
+
+
+def test_sync_clean_removes_relay_db(tmp_path):
+    src_dir = tmp_path / "src"
+    dst_dir = tmp_path / "dst"
+    src_dir.mkdir()
+    dst_dir.mkdir()
+    (src_dir / "hello.txt").write_text("hi")
+
+    args = SimpleNamespace(
+        source=str(src_dir),
+        destination=str(dst_dir),
+        dry_run=False,
+        delete=False,
+        clean=True,
+    )
+    handle_sync(args)
+
+    assert (dst_dir / "hello.txt").read_text() == "hi"
+    assert not (src_dir / ".relay.db").exists()
+    assert not (dst_dir / ".relay.db").exists()
