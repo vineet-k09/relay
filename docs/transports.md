@@ -64,11 +64,19 @@ Endpoints are parsed by `src/relay/core/endpoint.py` and routed via `src/relay/a
 def get_adapter(src: Endpoint, dst: Endpoint) -> BaseAdapters:
     is_windows = _is_windows_context(src, dst)
     if src.type == EndPointType.LOCAL and dst.type == EndPointType.LOCAL:
-        return WindowsTransportAdapter(src.path, dst.path) if is_windows else LocalTransportAdapter(src.path, dst.path)
+        return (
+            WindowsTransportAdapter(src.path, dst.path)
+            if is_windows
+            else LocalTransportAdapter(src.path, dst.path)
+        )
     if (src.type == EndPointType.LOCAL and dst.type == EndPointType.GCS) or (
         src.type == EndPointType.GCS and dst.type == EndPointType.LOCAL
     ):
-        return GCSWindowsTransportAdapter(src, dst) if is_windows else GCSTransportAdapter(src, dst)
+        return (
+            GCSWindowsTransportAdapter(src, dst)
+            if is_windows
+            else GCSTransportAdapter(src, dst)
+        )
     if (src.type == EndPointType.LOCAL and dst.type == EndPointType.SSH) or (
         src.type == EndPointType.SSH and dst.type == EndPointType.LOCAL
     ):
